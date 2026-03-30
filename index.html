@@ -800,15 +800,15 @@ async function loadDatabase() {
   try {
     res = await fetch(DB_URL);
     if (!res.ok) throw new Error('Primary URL failed');
-  } catch(e) {
-    setProgress(10, 'Trying mirror…');
-    try {
-      res = await fetch(DB_URL_FALLBACK);
-    } catch(e2) {
-      // Try a CORS proxy as last resort
-      res = await fetch('https://api.allorigins.win/raw?url=' + encodeURIComponent(DB_URL));
-    }
-  }
+  // Replace the catch block in loadDatabase with this:
+	} catch(e) {
+		setProgress(10, 'Trying mirror...');
+		const proxyUrl = 'https://api.allorigins.win/get?url=' + encodeURIComponent(DB_URL);
+		res = await fetch(proxyUrl);
+		const proxyData = await res.json();
+		// AllOrigins wraps the content in a "contents" string
+		json = JSON.parse(proxyData.contents); 
+	}
 
   setProgress(20, 'Downloading data…');
   const text = await res.text();
