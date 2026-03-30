@@ -403,11 +403,13 @@
     flex: 1;
     position: relative;
     overflow: hidden;
+	cursor: crosshair;
   }
 
   #graph-canvas {
     position: absolute;
     inset: 0;
+	z-index: 1; /* Keep it below UI but above background */
   }
 
   /* ── LEGEND ── */
@@ -489,6 +491,7 @@
     flex-direction: column;
     gap: 6px;
     z-index: 5;
+	pointer-events: none;
   }
   .ctrl-btn {
     width: 34px; height: 34px;
@@ -501,6 +504,7 @@
     display: flex; align-items: center; justify-content: center;
     transition: background 0.2s;
     backdrop-filter: blur(6px);
+	pointer-events: auto; /* Re-enable for the actual buttons */
   }
   .ctrl-btn:hover { background: var(--panel2); }
 
@@ -513,6 +517,7 @@
     align-items: center;
     gap: 10px;
     z-index: 5;
+	pointer-events: none; /* Same logic: don't block the graph */
   }
   .top-pill {
     background: rgba(13,10,7,0.88);
@@ -523,6 +528,7 @@
     color: var(--cream2);
     letter-spacing: 0.05em;
     backdrop-filter: blur(6px);
+	pointer-events: auto;
   }
   .top-pill span { color: var(--gold2); font-weight: 400; }
 
@@ -1014,27 +1020,47 @@ function initGraph() {
     .nodeColor(n => n.color || '#e8a030')
     .nodeVal(n => n.val || 1)
     .nodeLabel(() => '')
-    .linkColor(() => 'rgba(212,163,68,0.08)')
-    .linkWidth(0.3)
-    .linkDirectionalParticles(0)
+    // --- LINK UPDATES ---
+    .linkColor(() => 'rgba(212,163,68,0.4)') // Increased opacity from 0.08 to 0.4
+    .linkWidth(0.5)                          // Slightly thicker lines
+    .linkDirectionalParticles(2)             // Adds moving dots to show connection flow
+    .linkDirectionalParticleSpeed(0.005)
+    // --------------------
     .nodeResolution(8)
     .onNodeHover(handleNodeHover)
-    .onNodeClick(handleNodeClick)
-    .graphData({ nodes: [], links: [] });
+    .onNodeClick(handleNodeClick);
+
+  // --- INTERACTION FIX ---
+  // Ensure the controls are explicitly accessible
+  const controls = graphInstance.controls();
+  controls.enableDamping = true; // Makes rotation feel smoother
+  controls.dampingFactor = 0.1;
+  controls.rotateSpeed = 0.5;
+  
+  // Re-inject the empty data to initialize the internal scene
+  graphInstance.graphData({ nodes: [], links: [] });
 
   // Zoom controls
   document.getElementById('zoom-in').onclick = () => {
     const cam = graphInstance.camera();
-    cam.position.multiplyScalar(0.7);
+    const pos = cam.position;
+    pos.multiplyScalar(0.7);
+    graphInstance.cameraPosition(pos, null, 1000); // Smooth transition
   };
+  
   document.getElementById('zoom-out').onclick = () => {
     const cam = graphInstance.camera();
-    cam.position.multiplyScalar(1.4);
+    const pos = cam.position;
+    pos.multiplyScalar(1.4);
+    graphInstance.cameraPosition(pos, null, 1000);
   };
+
   document.getElementById('zoom-fit').onclick = () => graphInstance.zoomToFit(600);
+  
   document.getElementById('toggle-links').onclick = () => {
     showLinks = !showLinks;
-    graphInstance.linkOpacity(showLinks ? 1 : 0);
+    // Instead of opacity 0, we set the visible property
+    graphInstance.linkVisibility(showLinks);
   };
 }
 
