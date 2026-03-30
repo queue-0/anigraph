@@ -1228,30 +1228,69 @@ document.getElementById('username-input').addEventListener('keydown', e => { if 
 async function fetchUserList() {
   const username = document.getElementById('username-input').value.trim();
   if (!username) return;
+
+  const btn = document.getElementById('fetch-user-btn');
   const status = document.getElementById('user-status');
-  const btn = document.getElementById('fetch-list-btn');
+
+  // UI Feedback
   btn.disabled = true;
-  status.className = 'user-status';
-  status.textContent = 'Fetching list…';
+  status.textContent = 'Connecting to AniList...';
+  status.className = 'user-status loading';
+
+  // The GraphQL query AniList expects
+  const query = `
+    query ($name: String) {
+      MediaListCollection(userName: $name, type: ANIME) {
+        lists {
+          entries {
+            mediaId
+          }
+        }
+      }
+    }
+  `;
 
   try {
-    userListAnimeIds.clear();
+    const response = await fetch('https://graphql.anilist.co', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+      },
+      body: JSON.stringify({
+        query: query,
+        variables: { name: username }
+      })
+    });
 
-    if (currentPlatform === 'anilist') {
-      await fetchAniListList(username);
-    } else {
-      await fetchMALList(username);
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.errors ? errorData.errors[0].message : 'User not found');
     }
 
-    status.className = 'user-status ok';
-    status.textContent = `✓ Loaded ${userListAnimeIds.size.toLocaleString()} completed anime`;
+    const data = await response.json();
+    const allEntries = data.data.MediaListCollection.lists.flatMap(list => list.entries);
+    
+    // Convert IDs to a Set for fast lookup
+    userListAnimeIds = new Set(allEntries.map(e => e.mediaId));
+    userListActive = true;
+
+    // Success UI
+    status.textContent = `✓ Loaded ${userListAnimeIds.size} anime from ${username}`;
+    status.className = 'user-status success';
     document.getElementById('filter-by-list-btn').disabled = false;
     document.getElementById('clear-list-btn').disabled = false;
-  } catch(e) {
-    status.className = 'user-status err';
-    status.textContent = `✗ ${e.message}`;
+    
+    // Refresh graph
+    applyFiltersAndRender();
+
+  } catch (err) {
+    console.error("AniList Fetch Error:", err);
+    status.textContent = '✗ ' + err.message;
+    status.className = 'user-status error';
+  } finally {
+    btn.disabled = false;
   }
-  btn.disabled = false;
 }
 
 async function fetchAniListList(username) {
