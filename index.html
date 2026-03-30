@@ -179,6 +179,16 @@
   }
   .input-field::placeholder { color: var(--dim); }
 
+  .user-status {
+	  margin-top: 8px;
+	  font-size: 12px;
+	  padding: 6px 10px;
+	  border-radius: 4px;
+	  display: none;
+	}
+	.user-status.loading { display: block; color: var(--gold); background: rgba(212,163,68,0.1); }
+	.user-status.success { display: block; color: #40c060; background: rgba(64,192,96,0.1); }
+	.user-status.error   { display: block; color: var(--red); background: rgba(192,64,48,0.1); }
   .btn {
     background: var(--gold3);
     color: var(--bg);
