@@ -490,7 +490,7 @@
     display: flex;
     flex-direction: column;
     gap: 6px;
-    z-index: 5;
+    z-index: 10;
 	pointer-events: none;
   }
   .ctrl-btn {
@@ -507,6 +507,16 @@
 	pointer-events: auto; /* Re-enable for the actual buttons */
   }
   .ctrl-btn:hover { background: var(--panel2); }
+  
+  #graph-controls .ctrl-btn, .top-pill, .btn, .input-field, .tab {
+	  pointer-events: auto; /* Ensures buttons and inputs still work */
+	}
+	
+  #graph-canvas {
+	  position: absolute;
+	  inset: 0;
+	  z-index: 1;
+	}
 
   /* ── TOP BAR ── */
   #top-bar {
@@ -750,8 +760,7 @@
 </div><!-- /app -->
 
 <!-- ForceGraph via CDN -->
-<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-<script src="https://unpkg.com/3d-force-graph@1.73.4/dist/3d-force-graph.min.js"></script>
+<script src="https://unpkg.com/force-graph"></script>
 
 <script>
 // ── GLOBALS ──────────────────────────────────────────────────────────────────
@@ -1015,51 +1024,32 @@ function buildLegend(filtered, colorBy) {
 function initGraph() {
   const wrap = document.getElementById('graph-canvas');
 
-  graphInstance = ForceGraph3D()(wrap)
+  // Change to ForceGraph (2D)
+  graphInstance = ForceGraph()(wrap)
     .backgroundColor('#0d0a07')
+    .nodeRelSize(6) // Size multiplier for nodes
     .nodeColor(n => n.color || '#e8a030')
-    .nodeVal(n => n.val || 1)
-    .nodeLabel(() => '')
-    // --- LINK UPDATES ---
-    .linkColor(() => 'rgba(212,163,68,0.4)') // Increased opacity from 0.08 to 0.4
-    .linkWidth(0.5)                          // Slightly thicker lines
-    .linkDirectionalParticles(2)             // Adds moving dots to show connection flow
-    .linkDirectionalParticleSpeed(0.005)
-    // --------------------
-    .nodeResolution(8)
+    .nodeLabel(n => n.label) // 2D handles labels easily
+    .linkColor(() => 'rgba(212,163,68,0.2)')
+    .linkWidth(1)
     .onNodeHover(handleNodeHover)
     .onNodeClick(handleNodeClick);
 
-  // --- INTERACTION FIX ---
-  // Ensure the controls are explicitly accessible
-  const controls = graphInstance.controls();
-  controls.enableDamping = true; // Makes rotation feel smoother
-  controls.dampingFactor = 0.1;
-  controls.rotateSpeed = 0.5;
-  
-  // Re-inject the empty data to initialize the internal scene
-  graphInstance.graphData({ nodes: [], links: [] });
-
-  // Zoom controls
+  // 2D Zoom Controls
   document.getElementById('zoom-in').onclick = () => {
-    const cam = graphInstance.camera();
-    const pos = cam.position;
-    pos.multiplyScalar(0.7);
-    graphInstance.cameraPosition(pos, null, 1000); // Smooth transition
+    const currentZoom = graphInstance.zoom();
+    graphInstance.zoom(currentZoom * 1.3, 400); // Smooth zoom
   };
   
   document.getElementById('zoom-out').onclick = () => {
-    const cam = graphInstance.camera();
-    const pos = cam.position;
-    pos.multiplyScalar(1.4);
-    graphInstance.cameraPosition(pos, null, 1000);
+    const currentZoom = graphInstance.zoom();
+    graphInstance.zoom(currentZoom * 0.7, 400);
   };
 
   document.getElementById('zoom-fit').onclick = () => graphInstance.zoomToFit(600);
   
   document.getElementById('toggle-links').onclick = () => {
     showLinks = !showLinks;
-    // Instead of opacity 0, we set the visible property
     graphInstance.linkVisibility(showLinks);
   };
 }
@@ -1125,7 +1115,7 @@ function applyFiltersAndRender() {
 
   buildLegend(filtered, filters.colorBy);
 
-  setTimeout(() => graphInstance.zoomToFit(800), 1500);
+  setTimeout(() => graphInstance.zoomToFit(800, 50), 500);
 }
 
 // ── TOOLTIP ──────────────────────────────────────────────────────────────────
