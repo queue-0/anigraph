@@ -726,6 +726,10 @@
         <span class="stat-label">NODES SHOWN</span>
         <span class="stat-val" id="stat-nodes">—</span>
       </div>
+	  <div class="stat-row">
+        <span class="stat-label">CLUSTERS</span>
+        <span class="stat-val" id="stat-clusters">—</span>
+      </div>
       <div class="stat-row">
         <span class="stat-label">EDGES</span>
         <span class="stat-val" id="stat-edges">—</span>
@@ -1054,6 +1058,50 @@ function initGraph() {
   };
 }
 
+function calculateClusters(nodes, links) {
+  if (nodes.length === 0) return 0;
+
+  // Build an adjacency list
+  const adj = new Map();
+  nodes.forEach(n => adj.set(n.id, []));
+  
+  links.forEach(l => {
+    // Handle both raw IDs and object references used by force-graph
+    const sourceId = typeof l.source === 'object' ? l.source.id : l.source;
+    const targetId = typeof l.target === 'object' ? l.target.id : l.target;
+    
+    if (adj.has(sourceId) && adj.has(targetId)) {
+      adj.get(sourceId).push(targetId);
+      adj.get(targetId).push(sourceId);
+    }
+  });
+
+  const visited = new Set();
+  let clusterCount = 0;
+
+  nodes.forEach(node => {
+    if (!visited.has(node.id)) {
+      clusterCount++;
+      // Traverse the entire connected component
+      const stack = [node.id];
+      visited.add(node.id);
+      
+      while (stack.length > 0) {
+        const currentId = stack.pop();
+        const neighbors = adj.get(currentId) || [];
+        neighbors.forEach(neighborId => {
+          if (!visited.has(neighborId)) {
+            visited.add(neighborId);
+            stack.push(neighborId);
+          }
+        });
+      }
+    }
+  });
+
+  return clusterCount;
+}
+
 function applyFiltersAndRender() {
   const filters = getFilters();
   Object.keys(colorMap).forEach(k => delete colorMap[k]);
@@ -1113,6 +1161,10 @@ function applyFiltersAndRender() {
   document.getElementById('stat-nodes').textContent = nodes.length.toLocaleString();
   document.getElementById('stat-edges').textContent = links.length.toLocaleString();
 
+  // Calculate and update clusters
+  const clusters = calculateClusters(filteredNodes, filteredLinks);
+  document.getElementById('stat-clusters').textContent = clusters.toLocaleString();
+
   buildLegend(filtered, filters.colorBy);
 
   setTimeout(() => graphInstance.zoomToFit(800, 50), 500);
@@ -1139,7 +1191,7 @@ function handleNodeHover(node) {
     <div class="tt-row"><span class="tt-key">Studio</span> ${studio}</div>
     <div class="tt-row"><span class="tt-key">Duration</span> ${minsStr}</div>
     <div class="tt-row"><span class="tt-key">Score</span> ${score}</div>
-    ${tags ? `<div class="tt-tags">${tags}</div>` : ''}
+    ${tags ? '<div class="tt-tags">${tags}</div>' : ''}
   `;
   tt.style.display = 'block';
 }
