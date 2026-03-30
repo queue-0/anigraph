@@ -1162,7 +1162,7 @@ function applyFiltersAndRender() {
   document.getElementById('stat-edges').textContent = links.length.toLocaleString();
 
   // Calculate and update clusters
-  const clusters = calculateClusters(filteredNodes, filteredLinks);
+  const clusters = calculateClusters(nodes, links);
   document.getElementById('stat-clusters').textContent = clusters.toLocaleString();
 
   buildLegend(filtered, filters.colorBy);
