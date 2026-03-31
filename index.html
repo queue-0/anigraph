@@ -1120,12 +1120,13 @@ function applyFiltersAndRender() {
   let filtered = filterAnime(filters);
 
   if (userListActive && userListAnimeIds.size > 0) {
-    filtered = filtered.filter(a => {
-      // slim schema: a.id is the AniList URL e.g. "https://anilist.co/anime/1535"
-      const match = (a.id || '').match(/\/anime\/(\d+)/);
-      if (!match) return false;
-      return userListAnimeIds.has(parseInt(match[1]));
-    });
+  filtered = filtered.filter(a => {
+    // Extract the numeric ID from the URL string in your JSON
+    const match = (a.id || '').match(/\/anime\/(\d+)/);
+    if (!match) return false;
+    const numericId = parseInt(match[1]);
+    return userListAnimeIds.has(numericId);
+  });
     document.querySelector('#mode-pill span').textContent = `My List (${filtered.length.toLocaleString()})`;
   } else {
     document.querySelector('#mode-pill span').textContent = `All Anime`;
@@ -1265,16 +1266,18 @@ async function fetchUserList() {
 
   try {
     const response = await fetch('https://graphql.anilist.co', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json',
-      },
-      body: JSON.stringify({
-        query: query,
-        variables: { name: username }
-      })
-    });
+	  method: 'POST',
+	  headers: {
+		'Content-Type': 'application/json',
+		'Accept': 'application/json',
+		// Adding a simple Origin header can sometimes help with CORS/403 issues
+		'Origin': window.location.origin 
+	  },
+	  body: JSON.stringify({
+		query: query,
+		variables: { name: username }
+	  })
+	});
 
     if (!response.ok) {
       const errorData = await response.json();
