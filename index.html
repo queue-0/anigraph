@@ -1270,8 +1270,8 @@ async function fetchUserList() {
 	  headers: {
 		'Content-Type': 'application/json',
 		'Accept': 'application/json',
-		// Adding a simple Origin header can sometimes help with CORS/403 issues
-		'Origin': window.location.origin 
+		// Do NOT add 'User-Agent' or 'Origin' manually here; 
+		// let the browser handle it.
 	  },
 	  body: JSON.stringify({
 		query: query,
