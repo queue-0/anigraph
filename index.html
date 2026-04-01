@@ -4,594 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Anime Constellation — Explore the Anime Universe</title>
-<style>
-  @import url('https://fonts.googleapis.com/css2?family=Zen+Antique+Soft&family=Noto+Sans+JP:wght@300;400;500&family=Sawarabi+Mincho&display=swap');
-
-  :root {
-    --bg:        #0d0a07;
-    --bg2:       #151008;
-    --panel:     #1a1208;
-    --panel2:    #221808;
-    --border:    #3a2a10;
-    --border2:   #5a3e18;
-    --gold:      #d4a344;
-    --gold2:     #f0c060;
-    --gold3:     #b07820;
-    --amber:     #c87020;
-    --red:       #c04030;
-    --cream:     #e8d8b0;
-    --cream2:    #c8b890;
-    --dim:       #7a6040;
-    --glow:      rgba(212,163,68,0.15);
-    --glow2:     rgba(212,163,68,0.35);
-    --node-tv:      #e8a030;
-    --node-movie:   #c04060;
-    --node-ova:     #4080c0;
-    --node-ona:     #40a060;
-    --node-special: #9060c0;
-    --node-unknown: #606060;
-  }
-
-  * { box-sizing: border-box; margin: 0; padding: 0; }
-
-  body {
-    background: var(--bg);
-    color: var(--cream);
-    font-family: 'Noto Sans JP', sans-serif;
-    font-weight: 300;
-    overflow: hidden;
-    height: 100vh;
-    width: 100vw;
-  }
-
-  /* ── LOADING SCREEN ── */
-  #loader {
-    position: fixed; inset: 0;
-    background: var(--bg);
-    display: flex; flex-direction: column;
-    align-items: center; justify-content: center;
-    z-index: 9999;
-    gap: 24px;
-    transition: opacity 0.8s ease;
-  }
-  #loader.fade-out { opacity: 0; pointer-events: none; }
-
-  .loader-title {
-    font-family: 'Zen Antique Soft', serif;
-    font-size: 2.8rem;
-    color: var(--gold);
-    letter-spacing: 0.15em;
-    text-shadow: 0 0 40px rgba(212,163,68,0.6);
-  }
-  .loader-subtitle {
-    font-size: 0.85rem;
-    color: var(--dim);
-    letter-spacing: 0.2em;
-    text-transform: uppercase;
-  }
-  .loader-bar-wrap {
-    width: 320px;
-    height: 2px;
-    background: var(--border);
-    border-radius: 1px;
-    overflow: hidden;
-  }
-  .loader-bar {
-    height: 100%;
-    background: linear-gradient(90deg, var(--gold3), var(--gold2));
-    width: 0%;
-    transition: width 0.3s ease;
-    box-shadow: 0 0 10px var(--gold);
-  }
-  #loader-msg {
-    font-size: 0.8rem;
-    color: var(--dim);
-    letter-spacing: 0.1em;
-    min-height: 1.2em;
-  }
-
-  /* ── LAYOUT ── */
-  #app {
-    display: flex;
-    width: 100vw;
-    height: 100vh;
-  }
-
-  /* ── SIDEBAR ── */
-  #sidebar {
-    width: 300px;
-    min-width: 300px;
-    height: 100vh;
-    background: var(--panel);
-    border-right: 1px solid var(--border);
-    display: flex;
-    flex-direction: column;
-    overflow: hidden;
-    position: relative;
-    z-index: 10;
-  }
-
-  .sidebar-header {
-    padding: 20px 18px 16px;
-    border-bottom: 1px solid var(--border);
-    background: var(--panel2);
-    flex-shrink: 0;
-  }
-  .sidebar-logo {
-    font-family: 'Zen Antique Soft', serif;
-    font-size: 1.4rem;
-    color: var(--gold);
-    letter-spacing: 0.1em;
-    text-shadow: 0 0 20px rgba(212,163,68,0.4);
-    line-height: 1;
-  }
-  .sidebar-logo-jp {
-    font-family: 'Sawarabi Mincho', serif;
-    font-size: 0.75rem;
-    color: var(--dim);
-    letter-spacing: 0.2em;
-    margin-top: 4px;
-  }
-
-  .sidebar-scroll {
-    flex: 1;
-    overflow-y: auto;
-    overflow-x: hidden;
-    padding: 0 0 20px;
-  }
-  .sidebar-scroll::-webkit-scrollbar { width: 4px; }
-  .sidebar-scroll::-webkit-scrollbar-track { background: transparent; }
-  .sidebar-scroll::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
-
-  .section {
-    padding: 14px 18px 10px;
-    border-bottom: 1px solid var(--border);
-  }
-  .section-label {
-    font-size: 0.65rem;
-    letter-spacing: 0.25em;
-    text-transform: uppercase;
-    color: var(--gold3);
-    margin-bottom: 10px;
-    font-weight: 500;
-  }
-
-  /* ── USERNAME ── */
-  .username-row {
-    display: flex;
-    gap: 6px;
-  }
-  .input-field {
-    flex: 1;
-    background: var(--bg2);
-    border: 1px solid var(--border2);
-    color: var(--cream);
-    padding: 7px 10px;
-    font-size: 0.8rem;
-    font-family: 'Noto Sans JP', sans-serif;
-    border-radius: 3px;
-    outline: none;
-    transition: border-color 0.2s, box-shadow 0.2s;
-  }
-  .input-field:focus {
-    border-color: var(--gold);
-    box-shadow: 0 0 8px var(--glow);
-  }
-  .input-field::placeholder { color: var(--dim); }
-
-  .user-status {
-	  margin-top: 8px;
-	  font-size: 12px;
-	  padding: 6px 10px;
-	  border-radius: 4px;
-	  display: none;
-	}
-	.user-status.loading { display: block; color: var(--gold); background: rgba(212,163,68,0.1); }
-	.user-status.success { display: block; color: #40c060; background: rgba(64,192,96,0.1); }
-	.user-status.error   { display: block; color: var(--red); background: rgba(192,64,48,0.1); }
-  .btn {
-    background: var(--gold3);
-    color: var(--bg);
-    border: none;
-    padding: 7px 12px;
-    font-size: 0.75rem;
-    font-family: 'Noto Sans JP', sans-serif;
-    font-weight: 500;
-    cursor: pointer;
-    border-radius: 3px;
-    letter-spacing: 0.05em;
-    transition: background 0.2s, transform 0.1s;
-    white-space: nowrap;
-  }
-  .btn:hover { background: var(--gold); }
-  .btn:active { transform: scale(0.97); }
-  .btn:disabled { opacity: 0.4; cursor: not-allowed; }
-
-  .btn-sm {
-    padding: 5px 10px;
-    font-size: 0.7rem;
-  }
-
-  .user-status {
-    margin-top: 8px;
-    font-size: 0.72rem;
-    color: var(--dim);
-    min-height: 1em;
-    line-height: 1.4;
-  }
-  .user-status.ok { color: var(--gold2); }
-  .user-status.err { color: var(--red); }
-
-  /* ── TABS ── */
-  .platform-tabs {
-    display: flex;
-    gap: 4px;
-    margin-bottom: 10px;
-  }
-  .tab {
-    flex: 1;
-    padding: 5px;
-    font-size: 0.7rem;
-    background: var(--bg2);
-    border: 1px solid var(--border);
-    color: var(--dim);
-    cursor: pointer;
-    border-radius: 3px;
-    text-align: center;
-    transition: all 0.2s;
-    letter-spacing: 0.05em;
-  }
-  .tab.active {
-    background: var(--gold3);
-    color: var(--bg);
-    border-color: var(--gold3);
-  }
-
-  /* ── COLOR MODE ── */
-  .radio-group {
-    display: flex;
-    flex-direction: column;
-    gap: 5px;
-  }
-  .radio-item {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    cursor: pointer;
-    font-size: 0.78rem;
-    color: var(--cream2);
-    padding: 4px 6px;
-    border-radius: 3px;
-    transition: background 0.15s;
-  }
-  .radio-item:hover { background: var(--glow); }
-  .radio-item input { accent-color: var(--gold); cursor: pointer; }
-
-  /* ── RANGE FILTER ── */
-  .range-row {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    margin-bottom: 6px;
-  }
-  .range-label {
-    font-size: 0.72rem;
-    color: var(--cream2);
-    flex: 1;
-    white-space: nowrap;
-  }
-  .range-val {
-    font-size: 0.7rem;
-    color: var(--gold2);
-    min-width: 52px;
-    text-align: right;
-  }
-  input[type=range] {
-    width: 100%;
-    accent-color: var(--gold);
-    cursor: pointer;
-  }
-  .range-inputs {
-    display: flex;
-    gap: 6px;
-    margin-top: 4px;
-  }
-  .range-input-group {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    gap: 3px;
-  }
-  .range-input-label {
-    font-size: 0.62rem;
-    color: var(--dim);
-    letter-spacing: 0.1em;
-  }
-  .num-input {
-    width: 100%;
-    background: var(--bg2);
-    border: 1px solid var(--border2);
-    color: var(--cream);
-    padding: 4px 6px;
-    font-size: 0.75rem;
-    font-family: 'Noto Sans JP', sans-serif;
-    border-radius: 3px;
-    outline: none;
-  }
-  .num-input:focus { border-color: var(--gold); }
-
-  /* ── CHECKBOXES ── */
-  .checkbox-grid {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 4px;
-  }
-  .check-item {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    font-size: 0.72rem;
-    color: var(--cream2);
-    cursor: pointer;
-    padding: 3px 4px;
-    border-radius: 3px;
-    transition: background 0.15s;
-  }
-  .check-item:hover { background: var(--glow); }
-  .check-item input { accent-color: var(--gold); cursor: pointer; }
-
-  /* ── MULTI SELECT FILTER ── */
-  .filter-select {
-    width: 100%;
-    background: var(--bg2);
-    border: 1px solid var(--border2);
-    color: var(--cream);
-    padding: 6px 8px;
-    font-size: 0.75rem;
-    font-family: 'Noto Sans JP', sans-serif;
-    border-radius: 3px;
-    outline: none;
-    height: 80px;
-  }
-  .filter-select option { background: var(--panel2); }
-  .filter-clear {
-    font-size: 0.65rem;
-    color: var(--dim);
-    cursor: pointer;
-    text-decoration: underline;
-    margin-top: 3px;
-    display: inline-block;
-  }
-  .filter-clear:hover { color: var(--gold); }
-
-  /* ── SEARCH ── */
-  .search-row {
-    display: flex;
-    gap: 6px;
-    margin-bottom: 6px;
-  }
-
-  /* ── STATS BAR ── */
-  #stats-bar {
-    padding: 10px 18px;
-    border-top: 1px solid var(--border);
-    background: var(--panel2);
-    flex-shrink: 0;
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-  }
-  .stat-row {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-  }
-  .stat-label { font-size: 0.65rem; color: var(--dim); letter-spacing: 0.1em; }
-  .stat-val { font-size: 0.75rem; color: var(--gold2); font-weight: 400; }
-
-  .apply-btn {
-    width: 100%;
-    margin-top: 8px;
-    padding: 9px;
-    font-size: 0.8rem;
-    letter-spacing: 0.1em;
-    background: linear-gradient(135deg, var(--gold3), var(--amber));
-    color: var(--bg);
-    border: none;
-    border-radius: 3px;
-    cursor: pointer;
-    font-family: 'Noto Sans JP', sans-serif;
-    font-weight: 500;
-    transition: opacity 0.2s, transform 0.1s;
-    box-shadow: 0 2px 12px rgba(212,163,68,0.2);
-  }
-  .apply-btn:hover { opacity: 0.85; }
-  .apply-btn:active { transform: scale(0.98); }
-
-  /* ── GRAPH AREA ── */
-  #graph-wrap {
-    flex: 1;
-    position: relative;
-    overflow: hidden;
-	cursor: crosshair;
-  }
-
-  #graph-canvas {
-    position: absolute;
-    inset: 0;
-	z-index: 1; /* Keep it below UI but above background */
-  }
-
-  /* ── LEGEND ── */
-  #legend {
-    position: absolute;
-    bottom: 20px;
-    right: 20px;
-    background: rgba(13,10,7,0.88);
-    border: 1px solid var(--border2);
-    border-radius: 6px;
-    padding: 12px 14px;
-    min-width: 150px;
-    backdrop-filter: blur(8px);
-    z-index: 5;
-  }
-  .legend-title {
-    font-size: 0.6rem;
-    letter-spacing: 0.2em;
-    color: var(--dim);
-    text-transform: uppercase;
-    margin-bottom: 8px;
-  }
-  .legend-item {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    font-size: 0.72rem;
-    color: var(--cream2);
-    margin-bottom: 5px;
-  }
-  .legend-dot {
-    width: 10px; height: 10px;
-    border-radius: 50%;
-    flex-shrink: 0;
-  }
-
-  /* ── TOOLTIP ── */
-  #tooltip {
-    position: absolute;
-    pointer-events: none;
-    background: rgba(13,10,7,0.95);
-    border: 1px solid var(--border2);
-    border-radius: 6px;
-    padding: 12px 14px;
-    max-width: 260px;
-    z-index: 20;
-    display: none;
-    backdrop-filter: blur(8px);
-    box-shadow: 0 4px 24px rgba(0,0,0,0.6);
-  }
-  .tt-title {
-    font-family: 'Sawarabi Mincho', serif;
-    font-size: 0.95rem;
-    color: var(--gold2);
-    margin-bottom: 6px;
-    line-height: 1.3;
-  }
-  .tt-row {
-    font-size: 0.7rem;
-    color: var(--cream2);
-    margin-bottom: 3px;
-    display: flex;
-    gap: 6px;
-  }
-  .tt-key { color: var(--dim); min-width: 60px; }
-  .tt-tags {
-    font-size: 0.65rem;
-    color: var(--dim);
-    margin-top: 6px;
-    line-height: 1.5;
-  }
-
-  /* ── GRAPH CONTROLS ── */
-  #graph-controls {
-    position: absolute;
-    top: 16px;
-    right: 16px;
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-    z-index: 10;
-	pointer-events: none;
-  }
-  .ctrl-btn {
-    width: 34px; height: 34px;
-    background: rgba(13,10,7,0.88);
-    border: 1px solid var(--border2);
-    color: var(--gold);
-    font-size: 1rem;
-    cursor: pointer;
-    border-radius: 4px;
-    display: flex; align-items: center; justify-content: center;
-    transition: background 0.2s;
-    backdrop-filter: blur(6px);
-	pointer-events: auto; /* Re-enable for the actual buttons */
-  }
-  .ctrl-btn:hover { background: var(--panel2); }
-  
-  #graph-controls .ctrl-btn, .top-pill, .btn, .input-field, .tab {
-	  pointer-events: auto; /* Ensures buttons and inputs still work */
-	}
-	
-  #graph-canvas {
-	  position: absolute;
-	  inset: 0;
-	  z-index: 1;
-	}
-
-  /* ── TOP BAR ── */
-  #top-bar {
-    position: absolute;
-    top: 16px;
-    left: 16px;
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    z-index: 5;
-	pointer-events: none; /* Same logic: don't block the graph */
-  }
-  .top-pill {
-    background: rgba(13,10,7,0.88);
-    border: 1px solid var(--border2);
-    border-radius: 20px;
-    padding: 5px 14px;
-    font-size: 0.7rem;
-    color: var(--cream2);
-    letter-spacing: 0.05em;
-    backdrop-filter: blur(6px);
-	pointer-events: auto;
-  }
-  .top-pill span { color: var(--gold2); font-weight: 400; }
-
-  /* scrollbar */
-  ::-webkit-scrollbar { width: 4px; height: 4px; }
-  ::-webkit-scrollbar-track { background: transparent; }
-  ::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
-
-  /* grain overlay */
-  body::after {
-    content: '';
-    position: fixed;
-    inset: 0;
-    pointer-events: none;
-    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.04'/%3E%3C/svg%3E");
-    opacity: 0.4;
-    z-index: 1000;
-  }
-
-  .progress-ring {
-    display: inline-block;
-    font-size: 1.4rem;
-    animation: spin 2s linear infinite;
-  }
-  @keyframes spin { to { transform: rotate(360deg); } }
-
-  .year-filter-row {
-    display: flex;
-    gap: 6px;
-  }
-
-  select.filter-select-sm {
-    flex: 1;
-    background: var(--bg2);
-    border: 1px solid var(--border2);
-    color: var(--cream);
-    padding: 5px 6px;
-    font-size: 0.72rem;
-    border-radius: 3px;
-    outline: none;
-  }
-  select.filter-select-sm option { background: var(--panel2); }
-</style>
+<link rel="stylesheet" href="css/style.css">
 </head>
 <body>
 
@@ -618,42 +31,63 @@
 
       <!-- USER LIST -->
       <div class="section">
-        <div class="section-label">📋 Your Anime List</div>
-        <div class="platform-tabs">
-          <div class="tab active" data-platform="anilist">AniList</div>
-          <div class="tab" data-platform="mal">MyAnimeList</div>
-        </div>
+        <div class="section-label">📋 Your AniList</div>
         <div class="username-row">
-          <input class="input-field" id="username-input" placeholder="Enter username…" type="text">
+          <input class="input-field" id="username-input" placeholder="AniList username…" type="text">
           <button class="btn" id="fetch-list-btn">Fetch</button>
         </div>
         <div class="user-status" id="user-status"></div>
-        <div style="margin-top:8px; display:flex; gap:6px;">
-          <button class="btn btn-sm" id="filter-by-list-btn" disabled>Show My List</button>
-          <button class="btn btn-sm" id="clear-list-btn" style="background:var(--bg2);color:var(--dim);border:1px solid var(--border2);" disabled>Clear</button>
+
+        <!-- Status filter checkboxes — shown after successful fetch -->
+        <div id="list-status-filter" style="display:none; margin-top:10px;">
+          <div class="section-label" style="margin-bottom:6px;">Show list statuses:</div>
+          <div class="checkbox-grid" id="list-status-checkboxes">
+            <label class="check-item"><input type="checkbox" value="COMPLETED" checked> Completed</label>
+            <label class="check-item"><input type="checkbox" value="PLANNING" checked> Plan to Watch</label>
+            <label class="check-item"><input type="checkbox" value="CURRENT" checked> Watching</label>
+            <label class="check-item"><input type="checkbox" value="PAUSED" checked> On-Hold</label>
+            <label class="check-item"><input type="checkbox" value="DROPPED" checked> Dropped</label>
+            <label class="check-item"><input type="checkbox" value="REPEATING" checked> Rewatching</label>
+          </div>
+          <div style="margin-top:8px; display:flex; gap:6px;">
+            <button class="btn btn-sm" id="filter-by-list-btn">Show My List</button>
+            <button class="btn btn-sm" id="clear-list-btn"
+              style="background:var(--bg2);color:var(--dim);border:1px solid var(--border2);">Clear</button>
+          </div>
         </div>
       </div>
 
       <!-- SEARCH -->
       <div class="section">
-        <div class="section-label">🔍 Search Anime</div>
-        <div class="search-row">
-          <input class="input-field" id="search-input" placeholder="Title search…" type="text">
-        </div>
+        <div class="section-label">🔍 Search</div>
+        <input class="input-field" id="search-input" placeholder="Title, character, staff…" type="text" style="width:100%;">
       </div>
 
       <!-- NODE COLOR -->
       <div class="section">
         <div class="section-label">🎨 Color Nodes By</div>
         <div class="radio-group">
-          <label class="radio-item"><input type="radio" name="colorby" value="genre" checked> Genre / Tag</label>
-          <label class="radio-item"><input type="radio" name="colorby" value="studio"> Studio</label>
-          <label class="radio-item"><input type="radio" name="colorby" value="year"> Release Year</label>
+          <label class="radio-item"><input type="radio" name="colorby" value="node_type" checked> Node Type</label>
           <label class="radio-item"><input type="radio" name="colorby" value="type"> Anime Type</label>
+          <label class="radio-item"><input type="radio" name="colorby" value="year"> Release Year</label>
+          <label class="radio-item"><input type="radio" name="colorby" value="studio"> Studio</label>
+          <label class="radio-item"><input type="radio" name="colorby" value="tag"> Primary Tag</label>
         </div>
       </div>
 
-      <!-- TYPE FILTER -->
+      <!-- NODE TYPE VISIBILITY -->
+      <div class="section">
+        <div class="section-label">👁 Show Node Types</div>
+        <div class="checkbox-grid" id="node-type-visibility">
+          <label class="check-item"><input type="checkbox" value="anime" checked> Anime</label>
+          <label class="check-item"><input type="checkbox" value="studio" checked> Studios</label>
+          <label class="check-item"><input type="checkbox" value="tag" checked> Tags</label>
+          <label class="check-item"><input type="checkbox" value="character"> Characters</label>
+          <label class="check-item"><input type="checkbox" value="staff"> Staff</label>
+        </div>
+      </div>
+
+      <!-- ANIME TYPE FILTER -->
       <div class="section">
         <div class="section-label">📺 Anime Type</div>
         <div class="checkbox-grid" id="type-checkboxes">
@@ -702,30 +136,45 @@
         <div class="range-inputs">
           <div class="range-input-group">
             <div class="range-input-label">MIN</div>
-            <input class="num-input" id="len-min" type="number" min="0" value="30" placeholder="Min min.">
+            <input class="num-input" id="len-min" type="number" min="0" value="0" placeholder="Min min.">
           </div>
           <div class="range-input-group">
             <div class="range-input-label">MAX</div>
             <input class="num-input" id="len-max" type="number" min="0" value="999999" placeholder="Max min.">
           </div>
         </div>
-        <div style="font-size:0.62rem;color:var(--dim);margin-top:5px;">Default ≥ 30 min (episodes × ep. duration)</div>
       </div>
 
-      <!-- GENRE FILTER -->
+      <!-- TAG FILTER -->
       <div class="section">
-        <div class="section-label">🏷 Filter by Genre / Tag</div>
-        <input class="input-field" id="genre-search" placeholder="Search genres…" style="margin-bottom:6px;">
-        <select class="filter-select" id="genre-select" multiple></select>
-        <span class="filter-clear" id="genre-clear">Clear selection</span>
+        <div class="section-label">🏷 Filter by Tag</div>
+        <input class="input-field" id="tag-search" placeholder="Search tags…" style="margin-bottom:6px; width:100%;">
+        <select class="filter-select" id="tag-select" multiple></select>
+        <span class="filter-clear" id="tag-clear">Clear selection</span>
       </div>
 
       <!-- STUDIO FILTER -->
       <div class="section">
         <div class="section-label">🏢 Filter by Studio</div>
-        <input class="input-field" id="studio-search" placeholder="Search studios…" style="margin-bottom:6px;">
+        <input class="input-field" id="studio-search" placeholder="Search studios…" style="margin-bottom:6px; width:100%;">
         <select class="filter-select" id="studio-select" multiple></select>
         <span class="filter-clear" id="studio-clear">Clear selection</span>
+      </div>
+
+      <!-- CHARACTER FILTER -->
+      <div class="section">
+        <div class="section-label">👤 Filter by Character</div>
+        <input class="input-field" id="character-search" placeholder="Search characters…" style="margin-bottom:6px; width:100%;">
+        <select class="filter-select" id="character-select" multiple></select>
+        <span class="filter-clear" id="character-clear">Clear selection</span>
+      </div>
+
+      <!-- STAFF FILTER -->
+      <div class="section">
+        <div class="section-label">🎬 Filter by Staff</div>
+        <input class="input-field" id="staff-search" placeholder="Search staff…" style="margin-bottom:6px; width:100%;">
+        <select class="filter-select" id="staff-select" multiple></select>
+        <span class="filter-clear" id="staff-clear">Clear selection</span>
       </div>
 
     </div><!-- /sidebar-scroll -->
@@ -733,11 +182,15 @@
     <!-- STATS + APPLY -->
     <div id="stats-bar">
       <div class="stat-row">
-        <span class="stat-label">NODES SHOWN</span>
+        <span class="stat-label">ANIME NODES</span>
         <span class="stat-val" id="stat-nodes">—</span>
       </div>
-	  <div class="stat-row">
-        <span class="stat-label">CLUSTERS</span>
+      <div class="stat-row">
+        <span class="stat-label">META NODES</span>
+        <span class="stat-val" id="stat-meta">—</span>
+      </div>
+      <div class="stat-row">
+        <span class="stat-label">ANIME CLUSTERS</span>
         <span class="stat-val" id="stat-clusters">—</span>
       </div>
       <div class="stat-row">
@@ -748,7 +201,7 @@
         <span class="stat-label">TOTAL DB</span>
         <span class="stat-val" id="stat-total">—</span>
       </div>
-      <button class="apply-btn" id="apply-btn">Apply Filters & Render</button>
+      <button class="apply-btn" id="apply-btn">Apply Filters &amp; Render</button>
     </div>
   </aside>
 
@@ -773,632 +226,13 @@
 
 </div><!-- /app -->
 
-<!-- ForceGraph via CDN -->
+<!-- ForceGraph 2D via CDN -->
 <script src="https://unpkg.com/force-graph"></script>
 
-<script>
-// ── GLOBALS ──────────────────────────────────────────────────────────────────
-let rawData = [];
-let allGenres = new Set();
-let allStudios = new Set();
-let allYears = new Set();
-let userListAnimeIds = new Set(); // anilist/mal IDs of watched anime
-let userListActive = false;
-let currentPlatform = 'anilist';
-let graphInstance = null;
-let showLinks = true;
-
-// ── DATA SOURCE ───────────────────────────────────────────────────────────────
-// Loads data/anime-slim.json — generated by slim-database.py and committed to
-// this repo. The slim file is ~4-6 MB (vs 45 MB raw), well under GitHub's limits.
-const DATA_URL = './data/anime-slim.json';
-
-// Color palettes
-const GENRE_COLORS = [
-  '#e8a030','#c04060','#4080c0','#40a060','#9060c0','#c06040',
-  '#40a0a0','#a0c040','#e06080','#6080e0','#e08040','#40c080',
-  '#c040a0','#80e040','#4060c0','#e04040','#60c0e0','#c0a040',
-  '#8040c0','#40c040','#e0c040','#c08060','#60a0c0','#a06080',
-];
-
-const YEAR_GRADIENT = (year) => {
-  if (!year) return '#606060';
-  const t = Math.max(0, Math.min(1, (year - 1960) / 65));
-  const r = Math.round(80 + t * 160);
-  const g = Math.round(40 + t * 80);
-  const b = Math.round(20 + t * 40);
-  return `rgb(${r},${g},${b})`;
-};
-
-const TYPE_COLORS = {
-  TV:      '#e8a030',
-  MOVIE:   '#c04060',
-  OVA:     '#4080c0',
-  ONA:     '#40a060',
-  SPECIAL: '#9060c0',
-  UNKNOWN: '#606060',
-};
-
-// ── LOADER ───────────────────────────────────────────────────────────────────
-function setProgress(pct, msg) {
-  document.getElementById('loader-bar').style.width = pct + '%';
-  if (msg) document.getElementById('loader-msg').textContent = msg;
-}
-
-async function loadDatabase() {
-  setProgress(5, 'Fetching anime database…');
-
-  let res;
-  try {
-    res = await fetchWithTimeout(DATA_URL, 30000);
-    if (!res.ok) throw new Error(`HTTP ${res.status} — is data/anime-slim.json committed to your repo?`);
-  } catch(e) {
-    throw new Error(e.message);
-  }
-
-  setProgress(20, 'Downloading (~5 MB)…');
-
-  // Stream into text, yielding periodically so the progress bar stays alive
-  const reader = res.body.getReader();
-  const decoder = new TextDecoder();
-  let text = '';
-  let received = 0;
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    text += decoder.decode(value, { stream: true });
-    received += value?.length || 0;
-    const pct = Math.min(55, 20 + (received / 5_500_000) * 35);
-    setProgress(pct, `Downloading… ${(received / 1_048_576).toFixed(1)} MB`);
-    await new Promise(r => setTimeout(r, 0)); // yield to browser
-  }
-
-  setProgress(60, 'Parsing JSON…');
-  await new Promise(r => setTimeout(r, 0));
-  rawData = JSON.parse(text);
-
-  setProgress(70, `Processing ${rawData.length.toLocaleString()} anime…`);
-  document.getElementById('stat-total').textContent = rawData.length.toLocaleString();
-
-  rawData.forEach(a => {
-    (a.tags || []).forEach(t => allGenres.add(t));
-    (a.studios || []).forEach(s => allStudios.add(s));
-    if (a.year) allYears.add(a.year);
-  });
-
-  setProgress(80, 'Building UI…');
-  populateFilterLists();
-  setProgress(90, 'Initializing graph engine…');
-  initGraph();
-  setProgress(95, 'Rendering…');
-  applyFiltersAndRender();
-  setProgress(100, 'Ready!');
-
-  setTimeout(() => {
-    document.getElementById('loader').classList.add('fade-out');
-    document.getElementById('app').style.display = 'flex';
-    setTimeout(() => document.getElementById('loader').style.display = 'none', 900);
-  }, 400);
-}
-
-function fetchWithTimeout(url, ms) {
-  const ctrl = new AbortController();
-  const id = setTimeout(() => ctrl.abort(), ms);
-  return fetch(url, { signal: ctrl.signal }).finally(() => clearTimeout(id));
-}
-
-// ── POPULATE FILTER LISTS ────────────────────────────────────────────────────
-function populateFilterLists() {
-  const genreSelect = document.getElementById('genre-select');
-  const studioSelect = document.getElementById('studio-select');
-
-  const sortedGenres = [...allGenres].sort();
-  const sortedStudios = [...allStudios].sort();
-
-  sortedGenres.forEach(g => {
-    const opt = document.createElement('option');
-    opt.value = g; opt.textContent = g;
-    genreSelect.appendChild(opt);
-  });
-  sortedStudios.forEach(s => {
-    const opt = document.createElement('option');
-    opt.value = s; opt.textContent = s;
-    studioSelect.appendChild(opt);
-  });
-
-  // Genre search filter
-  document.getElementById('genre-search').addEventListener('input', function() {
-    const q = this.value.toLowerCase();
-    [...genreSelect.options].forEach(o => {
-      o.style.display = o.value.includes(q) ? '' : 'none';
-    });
-  });
-  document.getElementById('studio-search').addEventListener('input', function() {
-    const q = this.value.toLowerCase();
-    [...studioSelect.options].forEach(o => {
-      o.style.display = o.value.includes(q) ? '' : 'none';
-    });
-  });
-
-  document.getElementById('genre-clear').onclick = () => { [...genreSelect.options].forEach(o => o.selected = false); };
-  document.getElementById('studio-clear').onclick = () => { [...studioSelect.options].forEach(o => o.selected = false); };
-}
-
-// ── FILTER LOGIC ─────────────────────────────────────────────────────────────
-function getFilters() {
-  const types = [...document.querySelectorAll('#type-checkboxes input:checked')].map(i => i.value);
-  const yearFrom = parseInt(document.getElementById('year-from').value) || 0;
-  const yearTo = parseInt(document.getElementById('year-to').value) || 9999;
-  const epMin = parseInt(document.getElementById('ep-min').value) || 0;
-  const epMax = parseInt(document.getElementById('ep-max').value) || 999999;
-  const lenMin = parseFloat(document.getElementById('len-min').value) || 0;
-  const lenMax = parseFloat(document.getElementById('len-max').value) || 999999;
-  const genreSelect = document.getElementById('genre-select');
-  const studioSelect = document.getElementById('studio-select');
-  const selGenres = [...genreSelect.selectedOptions].map(o => o.value);
-  const selStudios = [...studioSelect.selectedOptions].map(o => o.value);
-  const search = document.getElementById('search-input').value.trim().toLowerCase();
-  const colorBy = document.querySelector('input[name="colorby"]:checked').value;
-  return { types, yearFrom, yearTo, epMin, epMax, lenMin, lenMax, selGenres, selStudios, search, colorBy };
-}
-
-function totalMinutes(anime) {
-  // slim format: duration is a plain integer (seconds), not {value, unit}
-  if (!anime.duration) return 0;
-  const eps = anime.episodes || 1;
-  return (eps * anime.duration) / 60;
-}
-
-function filterAnime(filters) {
-  return rawData.filter(a => {
-    if (!filters.types.includes(a.type)) return false;
-    // slim schema: a.year is a top-level integer (not a.animeSeason.year)
-    if (a.year && (a.year < filters.yearFrom || a.year > filters.yearTo)) return false;
-    if (a.episodes < filters.epMin || a.episodes > filters.epMax) return false;
-    const mins = totalMinutes(a);
-    if (mins > 0 && (mins < filters.lenMin || mins > filters.lenMax)) return false;
-    if (filters.selGenres.length > 0 && !filters.selGenres.some(g => (a.tags||[]).includes(g))) return false;
-    if (filters.selStudios.length > 0 && !filters.selStudios.some(s => (a.studios||[]).includes(s))) return false;
-    if (filters.search && !(a.title||'').toLowerCase().includes(filters.search)) return false;
-    return true;
-  });
-}
-
-// ── COLOR LOGIC ──────────────────────────────────────────────────────────────
-let colorByCache = {};
-let colorByIndex = 0;
-const colorMap = {};
-
-function getColor(anime, colorBy) {
-  switch(colorBy) {
-    case 'type':
-      return TYPE_COLORS[anime.type] || '#606060';
-    case 'year':
-      return YEAR_GRADIENT(anime.year);
-    case 'studio': {
-      const studio = (anime.studios||[])[0] || 'Unknown';
-      if (!colorMap[studio]) {
-        colorMap[studio] = GENRE_COLORS[colorByIndex++ % GENRE_COLORS.length];
-      }
-      return colorMap[studio];
-    }
-    case 'genre':
-    default: {
-      const genre = (anime.tags||[])[0] || 'Unknown';
-      if (!colorMap[genre]) {
-        colorMap[genre] = GENRE_COLORS[colorByIndex++ % GENRE_COLORS.length];
-      }
-      return colorMap[genre];
-    }
-  }
-}
-
-function buildLegend(filtered, colorBy) {
-  const container = document.getElementById('legend-items');
-  container.innerHTML = '';
-  const counts = {};
-
-  if (colorBy === 'type') {
-    filtered.forEach(a => { counts[a.type] = (counts[a.type]||0) + 1; });
-    Object.entries(TYPE_COLORS).forEach(([type, col]) => {
-      if (!counts[type]) return;
-      const div = document.createElement('div');
-      div.className = 'legend-item';
-      div.innerHTML = `<div class="legend-dot" style="background:${col}"></div><span>${type} (${(counts[type]||0).toLocaleString()})</span>`;
-      container.appendChild(div);
-    });
-  } else if (colorBy === 'year') {
-    [[1960,'≤1960'],[1980,'1980s'],[2000,'2000s'],[2010,'2010s'],[2020,'2020s+']].forEach(([y, label]) => {
-      const col = YEAR_GRADIENT(y);
-      const div = document.createElement('div');
-      div.className = 'legend-item';
-      div.innerHTML = `<div class="legend-dot" style="background:${col}"></div><span>${label}</span>`;
-      container.appendChild(div);
-    });
-  } else {
-    // genre or studio — top 10
-    filtered.forEach(a => {
-      const key = colorBy === 'studio'
-        ? ((a.studios||[])[0] || 'Unknown')
-        : ((a.tags||[])[0] || 'Unknown');
-      counts[key] = (counts[key]||0) + 1;
-    });
-    const top = Object.entries(counts).sort((a,b) => b[1]-a[1]).slice(0, 10);
-    top.forEach(([key]) => {
-      const col = colorMap[key] || '#606060';
-      const div = document.createElement('div');
-      div.className = 'legend-item';
-      div.innerHTML = `<div class="legend-dot" style="background:${col}"></div><span style="max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${key}</span>`;
-      container.appendChild(div);
-    });
-  }
-}
-
-// ── GRAPH ────────────────────────────────────────────────────────────────────
-function initGraph() {
-  const wrap = document.getElementById('graph-canvas');
-
-  // Change to ForceGraph (2D)
-  graphInstance = ForceGraph()(wrap)
-    .backgroundColor('#0d0a07')
-    .nodeRelSize(6) // Size multiplier for nodes
-    .nodeColor(n => n.color || '#e8a030')
-    .nodeLabel(n => n.label) // 2D handles labels easily
-    .linkColor(() => 'rgba(212,163,68,0.2)')
-    .linkWidth(1)
-    .onNodeHover(handleNodeHover)
-    .onNodeClick(handleNodeClick);
-
-  // 2D Zoom Controls
-  document.getElementById('zoom-in').onclick = () => {
-    const currentZoom = graphInstance.zoom();
-    graphInstance.zoom(currentZoom * 1.3, 400); // Smooth zoom
-  };
-  
-  document.getElementById('zoom-out').onclick = () => {
-    const currentZoom = graphInstance.zoom();
-    graphInstance.zoom(currentZoom * 0.7, 400);
-  };
-
-  document.getElementById('zoom-fit').onclick = () => graphInstance.zoomToFit(600);
-  
-  document.getElementById('toggle-links').onclick = () => {
-    showLinks = !showLinks;
-    graphInstance.linkVisibility(showLinks);
-  };
-}
-
-function calculateClusters(nodes, links) {
-  if (nodes.length === 0) return 0;
-
-  // Build an adjacency list
-  const adj = new Map();
-  nodes.forEach(n => adj.set(n.id, []));
-  
-  links.forEach(l => {
-    // Handle both raw IDs and object references used by force-graph
-    const sourceId = typeof l.source === 'object' ? l.source.id : l.source;
-    const targetId = typeof l.target === 'object' ? l.target.id : l.target;
-    
-    if (adj.has(sourceId) && adj.has(targetId)) {
-      adj.get(sourceId).push(targetId);
-      adj.get(targetId).push(sourceId);
-    }
-  });
-
-  const visited = new Set();
-  let clusterCount = 0;
-
-  nodes.forEach(node => {
-    if (!visited.has(node.id)) {
-      clusterCount++;
-      // Traverse the entire connected component
-      const stack = [node.id];
-      visited.add(node.id);
-      
-      while (stack.length > 0) {
-        const currentId = stack.pop();
-        const neighbors = adj.get(currentId) || [];
-        neighbors.forEach(neighborId => {
-          if (!visited.has(neighborId)) {
-            visited.add(neighborId);
-            stack.push(neighborId);
-          }
-        });
-      }
-    }
-  });
-
-  return clusterCount;
-}
-
-function applyFiltersAndRender() {
-  const filters = getFilters();
-  Object.keys(colorMap).forEach(k => delete colorMap[k]);
-  colorByIndex = 0;
-
-  let filtered = filterAnime(filters);
-
-  if (userListActive && userListAnimeIds.size > 0) {
-  filtered = filtered.filter(a => {
-    // Extract the numeric ID from the URL string in your JSON
-    const match = (a.id || '').match(/\/anime\/(\d+)/);
-    if (!match) return false;
-    const numericId = parseInt(match[1]);
-    return userListAnimeIds.has(numericId);
-  });
-    document.querySelector('#mode-pill span').textContent = `My List (${filtered.length.toLocaleString()})`;
-  } else {
-    document.querySelector('#mode-pill span').textContent = `All Anime`;
-  }
-
-  // Build AniList ID → index map for edge resolution
-  // slim schema: a.id = "https://anilist.co/anime/1535", a.related = ["https://anilist.co/anime/2994", ...]
-  const idToIdx = new Map();
-  filtered.forEach((a, i) => { if (a.id) idToIdx.set(a.id, i); });
-
-  // Assign colors
-  filtered.forEach(a => {
-    a._color = getColor(a, filters.colorBy);
-  });
-
-  // Build nodes
-  const nodes = filtered.map((a, i) => ({
-    id: i,
-    label: a.title,
-    color: userListActive && userListAnimeIds.size > 0 ? '#f0c060' : a._color,
-    val: Math.max(0.5, Math.log((a.episodes || 1) + 1) * 0.8),
-    anime: a,
-  }));
-
-  // Build edges from a.related (AniList URLs only in slim format)
-  const links = [];
-  const edgeSet = new Set();
-  filtered.forEach((a, i) => {
-    (a.related || []).forEach(url => {
-      const j = idToIdx.get(url);
-      if (j !== undefined && j !== i) {
-        const key = Math.min(i,j) + '-' + Math.max(i,j);
-        if (!edgeSet.has(key)) {
-          edgeSet.add(key);
-          links.push({ source: i, target: j });
-        }
-      }
-    });
-  });
-
-  graphInstance.graphData({ nodes, links });
-
-  document.getElementById('stat-nodes').textContent = nodes.length.toLocaleString();
-  document.getElementById('stat-edges').textContent = links.length.toLocaleString();
-
-  // Calculate and update clusters
-  const clusters = calculateClusters(nodes, links);
-  document.getElementById('stat-clusters').textContent = clusters.toLocaleString();
-
-  buildLegend(filtered, filters.colorBy);
-
-  setTimeout(() => graphInstance.zoomToFit(800, 50), 500);
-}
-
-// ── TOOLTIP ──────────────────────────────────────────────────────────────────
-function handleNodeHover(node) {
-  const tt = document.getElementById('tooltip');
-  if (!node) { tt.style.display = 'none'; return; }
-
-  const a = node.anime;
-  const mins = totalMinutes(a);
-  const minsStr = mins > 0 ? `${Math.round(mins)} min` : 'Unknown';
-  const tags = (a.tags || []).slice(0, 8).join(', ');
-  const studio = (a.studios || []).join(', ') || '—';
-  const year = a.year || '?';
-  const season = a.season || '';
-  const score = a.score ? a.score.toFixed(2) : '—';
-
-  tt.innerHTML = `
-    <div class="tt-title">${a.title}</div>
-    <div class="tt-row"><span class="tt-key">Type</span> ${a.type} · ${a.episodes} ep</div>
-    <div class="tt-row"><span class="tt-key">Season</span> ${season} ${year}</div>
-    <div class="tt-row"><span class="tt-key">Studio</span> ${studio}</div>
-    <div class="tt-row"><span class="tt-key">Duration</span> ${minsStr}</div>
-    <div class="tt-row"><span class="tt-key">Score</span> ${score}</div>
-    ${tags ? '<div class="tt-tags">${tags}</div>' : ''}
-  `;
-  tt.style.display = 'block';
-}
-
-document.getElementById('graph-canvas').addEventListener('mousemove', e => {
-  const tt = document.getElementById('tooltip');
-  if (tt.style.display === 'none') return;
-  const x = e.clientX + 14;
-  const y = e.clientY - 10;
-  tt.style.left = Math.min(x, window.innerWidth - 280) + 'px';
-  tt.style.top = Math.min(y, window.innerHeight - 200) + 'px';
-});
-
-function handleNodeClick(node) {
-  if (!node?.anime) return;
-  // slim schema: a.id is the AniList URL directly
-  const url = node.anime.id;
-  if (url) window.open(url, '_blank');
-}
-
-// ── USER LIST FETCH ───────────────────────────────────────────────────────────
-document.querySelectorAll('.tab').forEach(tab => {
-  tab.addEventListener('click', () => {
-    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-    tab.classList.add('active');
-    currentPlatform = tab.dataset.platform;
-    document.getElementById('username-input').placeholder = currentPlatform === 'anilist' ? 'AniList username…' : 'MAL username…';
-  });
-});
-
-document.getElementById('fetch-list-btn').addEventListener('click', fetchUserList);
-document.getElementById('username-input').addEventListener('keydown', e => { if (e.key === 'Enter') fetchUserList(); });
-
-async function fetchUserList() {
-  const username = document.getElementById('username-input').value.trim();
-  if (!username) return;
-
-  const btn = document.getElementById('fetch-list-btn');
-  const status = document.getElementById('user-status');
-
-  // UI Feedback
-  btn.disabled = true;
-  status.textContent = 'Connecting to AniList...';
-  status.className = 'user-status loading';
-
-  // The GraphQL query AniList expects
-  const query = `
-    query ($name: String) {
-      MediaListCollection(userName: $name, type: ANIME) {
-        lists {
-          entries {
-            mediaId
-          }
-        }
-      }
-    }
-  `;
-
-	// Clear previous list
-  userListAnimeIds.clear();
-
-  try {
-    const response = await fetch('https://graphql.anilist.co', {
-	  method: 'POST',
-	  headers: {
-		'Content-Type': 'application/json',
-		'Accept': 'application/json',
-		// Do NOT add 'User-Agent' or 'Origin' manually here; 
-		// let the browser handle it.
-	  },
-	  body: JSON.stringify({
-		query: query,
-		variables: { name: username }
-	  })
-	});
-
-    if (!response.ok) {
-      const errorData = await response.json();
-      throw new Error(errorData.errors ? errorData.errors[0].message : 'User not found');
-    }
-
-    const data = await response.json();
-    const allEntries = data.data.MediaListCollection.lists.flatMap(list => list.entries);
-    
-    // Convert IDs to a Set for fast lookup
-    userListAnimeIds = new Set(allEntries.map(e => e.mediaId));
-    userListActive = true;
-
-    // Success UI
-    status.textContent = `✓ Loaded ${userListAnimeIds.size} anime from ${username}`;
-    status.className = 'user-status success';
-    document.getElementById('filter-by-list-btn').disabled = false;
-    document.getElementById('clear-list-btn').disabled = false;
-    
-    // Refresh graph
-    applyFiltersAndRender();
-
-  } catch (err) {
-    console.error("AniList Fetch Error:", err);
-    status.textContent = '✗ ' + err.message;
-    status.className = 'user-status error';
-  } finally {
-    btn.disabled = false;
-  }
-}
-
-async function fetchAniListList(username) {
-  const query = `
-    query($name: String, $page: Int) {
-      MediaListCollection(userName: $name, type: ANIME, status: COMPLETED) {
-        lists {
-          entries {
-            media { id }
-          }
-        }
-      }
-    }
-  `;
-  const res = await fetch('https://graphql.anilist.co', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
-    body: JSON.stringify({ query, variables: { name: username } })
-  });
-  const json = await res.json();
-  if (json.errors) throw new Error(json.errors[0].message || 'AniList error');
-  const lists = json.data?.MediaListCollection?.lists || [];
-  lists.forEach(list => {
-    list.entries.forEach(e => {
-      if (e.media?.id) userListAnimeIds.add(e.media.id);
-    });
-  });
-}
-
-async function fetchMALList(username) {
-  // MAL via Jikan API (no auth needed for public lists)
-  let offset = 0;
-  let hasMore = true;
-  while (hasMore) {
-    const res = await fetch(`https://api.jikan.moe/v4/users/${encodeURIComponent(username)}/animelist?status=2&limit=300&page=${Math.floor(offset/300)+1}`);
-    const json = await res.json();
-    if (json.error) throw new Error(json.error);
-    const items = json.data || [];
-    items.forEach(item => {
-      if (item.node?.id || item.mal_id) {
-        userListAnimeIds.add(item.node?.id || item.mal_id);
-      }
-    });
-    if (items.length < 300) hasMore = false;
-    else offset += 300;
-    if (offset > 3000) hasMore = false; // safety cap
-    await new Promise(r => setTimeout(r, 400)); // Jikan rate limit
-  }
-}
-
-document.getElementById('filter-by-list-btn').addEventListener('click', () => {
-  userListActive = true;
-  applyFiltersAndRender();
-});
-
-document.getElementById('clear-list-btn').addEventListener('click', () => {
-  userListActive = false;
-  userListAnimeIds.clear();
-  document.getElementById('user-status').textContent = '';
-  document.getElementById('user-status').className = 'user-status';
-  document.getElementById('filter-by-list-btn').disabled = true;
-  document.getElementById('clear-list-btn').disabled = true;
-  document.getElementById('username-input').value = '';
-  applyFiltersAndRender();
-});
-
-// Apply button
-document.getElementById('apply-btn').addEventListener('click', applyFiltersAndRender);
-
-// Re-render on colorby change immediately
-document.querySelectorAll('input[name="colorby"]').forEach(r => {
-  r.addEventListener('change', applyFiltersAndRender);
-});
-
-// Search live
-document.getElementById('search-input').addEventListener('input', () => {
-  clearTimeout(window._searchTimer);
-  window._searchTimer = setTimeout(applyFiltersAndRender, 400);
-});
-
-// ── START ─────────────────────────────────────────────────────────────────────
-loadDatabase().catch(err => {
-  const msg = document.getElementById('loader-msg');
-  msg.style.color = '#c04030';
-  msg.style.maxWidth = '420px';
-  msg.style.textAlign = 'center';
-  msg.style.lineHeight = '1.6';
-  msg.style.whiteSpace = 'pre-wrap';
-  msg.textContent = '✗ Failed to load database.\n\n' + err.message +
-    '\n\nTry refreshing, or check your network connection.\nSome ad-blockers block CDN requests.';
-  console.error('DB load failed:', err);
-});
-</script>
+<!-- App modules -->
+<script src="js/anilist.js"></script>
+<script src="js/filters.js"></script>
+<script src="js/graph.js"></script>
+<script src="js/app.js"></script>
 </body>
 </html>
