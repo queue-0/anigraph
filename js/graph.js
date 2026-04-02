@@ -23,6 +23,8 @@ function initGraph() {
   const wrap = document.getElementById('graph-canvas');
 
   graphInstance = ForceGraph()(wrap)
+	.graphData({ nodes: [], links: [] }) // Initialize with empty data
+	.d3Force('center', d3.forceCenter()) // Force nodes toward the middle
     .backgroundColor('#0d0a07')
     .nodeRelSize(6)
     .nodeColor(n => resolveNodeColor(n))
