@@ -9,34 +9,40 @@
  *  - Share button
  *  - Clear All Filters
  *  - Per-section Apply Filters buttons
+ *  - Mode selector
+ *  - Download list button
+ *  - Country checkbox population
  */
 
 'use strict';
 
 // ── GLOBALS ───────────────────────────────────────────────────────────────────
-
 let rawGraph = null;
-window._nodeById = new Map();
+window._nodeById  = new Map();
+window.rawGraph   = null;  // also exposed for anilist.js computeRelatedAnime
 
 const DATA_URL = './data/anime-graph.json';
 
 // ── DEFAULTS ──────────────────────────────────────────────────────────────────
-
 const DEFAULTS = {
-  types:        ['TV','MOVIE','OVA','ONA','SPECIAL','UNKNOWN'],
-  nodeTypes:    ['anime','studio','tag'],
-  yearFrom:     1917, yearTo:   2030,
-  epMin:        0,    epMax:    9999,
-  lenMin:       0,    lenMax:   999999,
-  colorBy:      'node_type',
-  search:       '',
-  selTags:      [], selStudios: [], selChars: [], selStaff: [],
-  username:     '',
-  listStatuses: ['COMPLETED','PLANNING','CURRENT','PAUSED','DROPPED','REPEATING'],
+  types:          ['TV','MOVIE','OVA','ONA','SPECIAL','UNKNOWN'],
+  releaseStatuses:['FINISHED','RELEASING','NOT_YET_RELEASED','CANCELLED','HIATUS','UNKNOWN'],
+  nodeTypes:      ['anime','studio','genre'],
+  yearFrom:       1917, yearTo:    2030,
+  epMin:          0,    epMax:     9999,
+  lenMin:         0,    lenMax:    999999,
+  scoreMin:       0,    scoreMax:  10,
+  colorBy:        'node_type',
+  nodeSizeBy:     'default',
+  search:         '',
+  selTags:        [], selGenres: [], selStudios: [], selChars: [], selStaff: [],
+  username:       '',
+  listStatuses:   ['COMPLETED','PLANNING','CURRENT','PAUSED','DROPPED','REPEATING','RELATED'],
+  minClusterSize: 1,
+  mode:           'all',
 };
 
 // ── LOADER ────────────────────────────────────────────────────────────────────
-
 function setProgress(pct, msg) {
   document.getElementById('loader-bar').style.width = pct + '%';
   if (msg) document.getElementById('loader-msg').textContent = msg;
@@ -49,9 +55,10 @@ async function fetchWithTimeout(url, ms) {
 }
 
 async function loadDatabase() {
-  setProgress(0, 'Initialising graph engine…');
+  setProgress(0,  'Initialising graph engine…');
   initGraph();
-  setProgress(5, 'Fetching anime graph database…');
+  setProgress(5,  'Fetching anime graph database…');
+
   let res;
   try {
     res = await fetchWithTimeout(DATA_URL, 60000);
@@ -59,13 +66,13 @@ async function loadDatabase() {
   } catch (e) { throw new Error(e.message); }
 
   setProgress(15, 'Downloading…');
-  const reader = res.body.getReader();
+  const reader  = res.body.getReader();
   const decoder = new TextDecoder();
   let text = '', received = 0;
   while (true) {
     const { done, value } = await reader.read();
     if (done) break;
-    text += decoder.decode(value, { stream: true });
+    text     += decoder.decode(value, { stream: true });
     received += value?.length || 0;
     setProgress(Math.min(50, 15 + (received / 12e6) * 35),
       'Downloading… ' + (received / 1048576).toFixed(1) + ' MB');
@@ -75,6 +82,7 @@ async function loadDatabase() {
   setProgress(55, 'Parsing JSON…');
   await new Promise(r => setTimeout(r, 0));
   rawGraph = JSON.parse(text);
+  window.rawGraph = rawGraph;
 
   setProgress(65, 'Building node index (' + rawGraph.nodes.length.toLocaleString() + ' nodes)…');
   await new Promise(r => setTimeout(r, 0));
@@ -101,30 +109,63 @@ async function loadDatabase() {
 }
 
 // ── POPULATE FILTER DROPDOWNS ─────────────────────────────────────────────────
-
 function populateFilterLists() {
-  const studios = [], tags = [], characters = [], staff = [];
+  const studios = [], tags = [], genres = [], characters = [], staff = [];
+  const countriesFound = new Set();
+
   rawGraph.nodes.forEach(n => {
     switch (n.type) {
       case 'studio':    studios.push(n.name);    break;
+      case 'genre':     genres.push(n.name);     break;
       case 'tag':       tags.push(n.name);       break;
       case 'character': characters.push(n.name); break;
       case 'staff':     staff.push(n.name);      break;
+      case 'anime':
+        if (n.country) countriesFound.add(n.country);
+        break;
     }
   });
-  studios.sort(); tags.sort(); characters.sort(); staff.sort();
-  fillSelect('studio-select', studios);
-  fillSelect('tag-select', tags);
+
+  studios.sort(); tags.sort(); genres.sort(); characters.sort(); staff.sort();
+  fillSelect('studio-select',    studios);
+  fillSelect('tag-select',       tags);
+  fillSelect('genre-select',     genres);
   fillSelect('character-select', characters);
-  fillSelect('staff-select', staff);
+  fillSelect('staff-select',     staff);
+
   wireSearch('studio-search',    'studio-select');
   wireSearch('tag-search',       'tag-select');
+  wireSearch('genre-search',     'genre-select');
   wireSearch('character-search', 'character-select');
   wireSearch('staff-search',     'staff-select');
+
   wireClear('studio-clear',    'studio-select');
   wireClear('tag-clear',       'tag-select');
+  wireClear('genre-clear',     'genre-select');
   wireClear('character-clear', 'character-select');
   wireClear('staff-clear',     'staff-select');
+
+  // Populate country checkboxes dynamically
+  populateCountryCheckboxes(countriesFound);
+}
+
+function populateCountryCheckboxes(countriesFound) {
+  const container = document.getElementById('country-checkboxes');
+  if (!container) return;
+  container.innerHTML = '';
+
+  const COUNTRY_LABELS = window.COUNTRY_LABELS || {};
+  // Sort: known countries first, then unknown
+  const known   = [...countriesFound].filter(c => c !== '??').sort();
+  const unknown = countriesFound.has('??') ? ['??'] : [];
+
+  [...known, ...unknown].forEach(code => {
+    const label = COUNTRY_LABELS[code] || code;
+    const el = document.createElement('label');
+    el.className = 'check-item';
+    el.innerHTML = `<input type="checkbox" value="${code}" checked> ${label}`;
+    container.appendChild(el);
+  });
 }
 
 function fillSelect(id, items) {
@@ -148,32 +189,63 @@ function wireSearch(inputId, selectId) {
 }
 
 function wireClear(clearId, selectId) {
-  const el = document.getElementById(clearId);
+  const el  = document.getElementById(clearId);
   const sel = document.getElementById(selectId);
   if (!el || !sel) return;
   el.onclick = () => { [...sel.options].forEach(o => o.selected = false); };
 }
 
 // ── MAIN RENDER LOOP ──────────────────────────────────────────────────────────
-
 function applyFiltersAndRender() {
   if (!rawGraph) return;
   const filters = getFilters();
   const result  = buildGraphData(rawGraph, filters, window._nodeById);
   renderGraph(result);
   buildLegend(result.filteredAnime, filters.colorBy, filters.visibleNodeTypes, result.visibleMeta);
+
   const activeIds = getActiveUserIds ? getActiveUserIds() : null;
-  document.querySelector('#mode-pill span').textContent =
-    activeIds !== null ? 'My List (' + result.filteredAnime.length.toLocaleString() + ')' : 'All Anime';
+  const modeLabel = filters.mode === 'user' && activeIds !== null
+    ? 'My List (' + result.filteredAnime.length.toLocaleString() + ')'
+    : 'All Anime';
+  document.querySelector('#mode-pill span').textContent = modeLabel;
+
   clearTimeout(window._urlTimer);
   window._urlTimer = setTimeout(saveToUrl, 300);
 }
 
-// ── URL STATE ─────────────────────────────────────────────────────────────────
+// ── DOWNLOAD BUTTON ───────────────────────────────────────────────────────────
+function downloadVisibleAnimeList() {
+  if (!rawGraph) return;
+  const filters = getFilters();
+  const result  = buildGraphData(rawGraph, filters, window._nodeById);
 
+  const allAnime = [...result.filteredAnime, ...(result.highlightedAnime || [])];
+  if (allAnime.length === 0) {
+    alert('No anime currently visible.');
+    return;
+  }
+
+  const lines = allAnime.map(a => {
+    const title = a.title_en || a.title || '?';
+    const year  = a.year ? ` (${a.year})` : '';
+    return `${title}${year}`;
+  });
+  lines.sort();
+
+  const blob = new Blob([lines.join('\n')], { type: 'text/plain' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href     = url;
+  a.download = 'anigraph-list.txt';
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+// ── URL STATE ─────────────────────────────────────────────────────────────────
 function saveToUrl() {
   try {
     const s = {};
+
     const checkedTypes = [...document.querySelectorAll('#type-checkboxes input:checked')].map(i => i.value);
     if (checkedTypes.length !== DEFAULTS.types.length) s.t = checkedTypes.join(',');
 
@@ -196,20 +268,36 @@ function saveToUrl() {
     if (lf !== DEFAULTS.lenMin) s.lf = lf;
     if (lt !== DEFAULTS.lenMax) s.lt = lt;
 
+    const sf = parseFloat(document.getElementById('score-min').value);
+    const st = parseFloat(document.getElementById('score-max').value);
+    if (sf !== DEFAULTS.scoreMin) s.smn = sf;
+    if (st !== DEFAULTS.scoreMax) s.smx = st;
+
     const cb = document.querySelector('input[name="colorby"]:checked')?.value;
     if (cb && cb !== DEFAULTS.colorBy) s.cb = cb;
+
+    const nsb = document.querySelector('input[name="nodeSizeBy"]:checked')?.value;
+    if (nsb && nsb !== DEFAULTS.nodeSizeBy) s.nsb = nsb;
 
     const srch = document.getElementById('search-input').value.trim();
     if (srch) s.q = srch;
 
     const tags    = [...document.getElementById('tag-select').selectedOptions].map(o => o.value);
+    const genres  = [...document.getElementById('genre-select').selectedOptions].map(o => o.value);
     const studios = [...document.getElementById('studio-select').selectedOptions].map(o => o.value);
     const chars   = [...document.getElementById('character-select').selectedOptions].map(o => o.value);
     const stf     = [...document.getElementById('staff-select').selectedOptions].map(o => o.value);
     if (tags.length)    s.tg = tags.join('|');
+    if (genres.length)  s.gn = genres.join('|');
     if (studios.length) s.st = studios.join('|');
     if (chars.length)   s.ch = chars.join('|');
     if (stf.length)     s.sf = stf.join('|');
+
+    const mc = parseInt(document.getElementById('min-cluster-size')?.value) || 1;
+    if (mc !== DEFAULTS.minClusterSize) s.mc = mc;
+
+    const mode = document.getElementById('mode-select')?.value || 'all';
+    if (mode !== DEFAULTS.mode) s.md = mode;
 
     const username = document.getElementById('username-input').value.trim();
     if (username) {
@@ -236,26 +324,39 @@ async function restoreFromUrl() {
       const vals = new Set(p.get('nt').split(','));
       document.querySelectorAll('#node-type-visibility input').forEach(i => { i.checked = vals.has(i.value); });
     }
-    if (p.has('yf')) document.getElementById('year-from').value = p.get('yf');
-    if (p.has('yt')) document.getElementById('year-to').value   = p.get('yt');
-    if (p.has('ef')) document.getElementById('ep-min').value    = p.get('ef');
-    if (p.has('et')) document.getElementById('ep-max').value    = p.get('et');
-    if (p.has('lf')) document.getElementById('len-min').value   = p.get('lf');
-    if (p.has('lt')) document.getElementById('len-max').value   = p.get('lt');
+    if (p.has('yf'))  document.getElementById('year-from').value  = p.get('yf');
+    if (p.has('yt'))  document.getElementById('year-to').value    = p.get('yt');
+    if (p.has('ef'))  document.getElementById('ep-min').value     = p.get('ef');
+    if (p.has('et'))  document.getElementById('ep-max').value     = p.get('et');
+    if (p.has('lf'))  document.getElementById('len-min').value    = p.get('lf');
+    if (p.has('lt'))  document.getElementById('len-max').value    = p.get('lt');
+    if (p.has('smn')) document.getElementById('score-min').value  = p.get('smn');
+    if (p.has('smx')) document.getElementById('score-max').value  = p.get('smx');
+    if (p.has('mc'))  document.getElementById('min-cluster-size').value = p.get('mc');
+
     if (p.has('cb')) {
       const radio = document.querySelector('input[name="colorby"][value="' + p.get('cb') + '"]');
       if (radio) radio.checked = true;
     }
+    if (p.has('nsb')) {
+      const radio = document.querySelector('input[name="nodeSizeBy"][value="' + p.get('nsb') + '"]');
+      if (radio) radio.checked = true;
+    }
     if (p.has('q')) document.getElementById('search-input').value = p.get('q');
+    if (p.has('md')) {
+      const sel = document.getElementById('mode-select');
+      if (sel) sel.value = p.get('md');
+    }
 
-    function restoreSelect(id, raw, sep) {
+    function restoreSelect(id, raw) {
       if (!raw) return;
-      const vals = new Set(raw.split(sep || '|'));
+      const vals = new Set(raw.split('|'));
       const sel  = document.getElementById(id);
       if (!sel) return;
       [...sel.options].forEach(o => { o.selected = vals.has(o.value); });
     }
     restoreSelect('tag-select',       p.get('tg'));
+    restoreSelect('genre-select',     p.get('gn'));
     restoreSelect('studio-select',    p.get('st'));
     restoreSelect('character-select', p.get('ch'));
     restoreSelect('staff-select',     p.get('sf'));
@@ -267,7 +368,6 @@ async function restoreFromUrl() {
         document.querySelectorAll('#list-status-checkboxes input').forEach(i => { i.checked = vals.has(i.value); });
       }
       await fetchUserList();
-      // Re-apply colorby after list is loaded (completion option now visible)
       if (p.has('cb')) {
         const radio = document.querySelector('input[name="colorby"][value="' + p.get('cb') + '"]');
         if (radio) radio.checked = true;
@@ -276,6 +376,7 @@ async function restoreFromUrl() {
   } catch (e) { console.warn('URL restore failed:', e); }
 }
 
+// ── SHARE ─────────────────────────────────────────────────────────────────────
 function copyShareLink() {
   saveToUrl();
   const url = window.location.href;
@@ -305,29 +406,45 @@ function showShareToast(msg) {
 }
 
 // ── CLEAR ALL FILTERS ─────────────────────────────────────────────────────────
-
 function clearAllFilters() {
   document.querySelectorAll('#type-checkboxes input').forEach(i => i.checked = true);
+  document.querySelectorAll('#release-status-checkboxes input').forEach(i => i.checked = true);
+  document.querySelectorAll('#country-checkboxes input').forEach(i => i.checked = true);
+
   const defNT = new Set(DEFAULTS.nodeTypes);
   document.querySelectorAll('#node-type-visibility input').forEach(i => { i.checked = defNT.has(i.value); });
-  document.getElementById('year-from').value = DEFAULTS.yearFrom;
-  document.getElementById('year-to').value   = DEFAULTS.yearTo;
-  document.getElementById('ep-min').value    = DEFAULTS.epMin;
-  document.getElementById('ep-max').value    = DEFAULTS.epMax;
-  document.getElementById('len-min').value   = DEFAULTS.lenMin;
-  document.getElementById('len-max').value   = DEFAULTS.lenMax;
-  document.querySelector('input[name="colorby"][value="node_type"]').checked = true;
+
+  document.getElementById('year-from').value  = DEFAULTS.yearFrom;
+  document.getElementById('year-to').value    = DEFAULTS.yearTo;
+  document.getElementById('ep-min').value     = DEFAULTS.epMin;
+  document.getElementById('ep-max').value     = DEFAULTS.epMax;
+  document.getElementById('len-min').value    = DEFAULTS.lenMin;
+  document.getElementById('len-max').value    = DEFAULTS.lenMax;
+  document.getElementById('score-min').value  = DEFAULTS.scoreMin;
+  document.getElementById('score-max').value  = DEFAULTS.scoreMax;
+  document.getElementById('min-cluster-size').value = DEFAULTS.minClusterSize;
+
+  document.querySelector('input[name="colorby"][value="node_type"]').checked  = true;
+  document.querySelector('input[name="nodeSizeBy"][value="default"]').checked = true;
   document.getElementById('search-input').value = '';
-  ['tag-select','studio-select','character-select','staff-select'].forEach(id => {
+
+  ['tag-select','genre-select','studio-select','character-select','staff-select'].forEach(id => {
     const sel = document.getElementById(id);
     if (sel) [...sel.options].forEach(o => o.selected = false);
   });
+
+  // Reset all highlight toggles
+  document.querySelectorAll('.highlight-toggle input').forEach(i => i.checked = false);
+
+  // Reset mode
+  const modeSelect = document.getElementById('mode-select');
+  if (modeSelect) modeSelect.value = 'all';
+
   history.replaceState(null, '', window.location.pathname + window.location.search);
   applyFiltersAndRender();
 }
 
 // ── COLLAPSIBLE SECTIONS ──────────────────────────────────────────────────────
-
 function initCollapsibleSections() {
   document.querySelectorAll('.section-header').forEach(header => {
     const body = document.getElementById('section-body-' + header.dataset.section);
@@ -341,9 +458,11 @@ function initCollapsibleSections() {
 }
 
 // ── EVENT WIRING ──────────────────────────────────────────────────────────────
-
 document.addEventListener('DOMContentLoaded', () => {
   document.querySelectorAll('input[name="colorby"]').forEach(r => {
+    r.addEventListener('change', applyFiltersAndRender);
+  });
+  document.querySelectorAll('input[name="nodeSizeBy"]').forEach(r => {
     r.addEventListener('change', applyFiltersAndRender);
   });
   document.getElementById('node-type-visibility').addEventListener('change', applyFiltersAndRender);
@@ -356,6 +475,15 @@ document.addEventListener('DOMContentLoaded', () => {
   });
   document.getElementById('clear-all-btn')?.addEventListener('click', clearAllFilters);
   document.getElementById('share-btn')?.addEventListener('click', copyShareLink);
+  document.getElementById('download-btn')?.addEventListener('click', downloadVisibleAnimeList);
+  document.getElementById('apply-cluster-size')?.addEventListener('click', applyFiltersAndRender);
+  document.getElementById('mode-select')?.addEventListener('change', applyFiltersAndRender);
+
+  // Highlight toggles — re-render on change
+  document.querySelectorAll('.highlight-toggle input').forEach(i => {
+    i.addEventListener('change', applyFiltersAndRender);
+  });
+
   initCollapsibleSections();
 
   loadDatabase().catch(err => {

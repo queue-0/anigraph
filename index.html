@@ -51,6 +51,7 @@
               <label class="check-item"><input type="checkbox" value="PAUSED" checked> On-Hold</label>
               <label class="check-item"><input type="checkbox" value="DROPPED" checked> Dropped</label>
               <label class="check-item"><input type="checkbox" value="REPEATING" checked> Rewatching</label>
+              <label class="check-item"><input type="checkbox" value="RELATED" checked> Related</label>
             </div>
             <div style="margin-top:8px; display:flex; gap:6px;">
               <button class="btn btn-sm section-apply-btn" id="filter-by-list-btn">Apply Filters</button>
@@ -58,6 +59,20 @@
                 style="background:var(--bg2);color:var(--dim);border:1px solid var(--border2);">Clear List</button>
             </div>
           </div>
+        </div>
+      </div>
+
+      <!-- MODES -->
+      <div class="section collapsible-section">
+        <div class="section-header" data-section="modes">
+          <div class="section-label">🎮 Mode</div>
+          <span class="collapse-icon">▾</span>
+        </div>
+        <div class="section-body" id="section-body-modes">
+          <select class="filter-select" id="mode-select" style="height:auto;">
+            <option value="all">All Anime</option>
+            <option value="user" id="mode-user-option" disabled>My List (load username first)</option>
+          </select>
         </div>
       </div>
 
@@ -83,9 +98,36 @@
             <label class="radio-item"><input type="radio" name="colorby" value="node_type" checked> Node Type</label>
             <label class="radio-item"><input type="radio" name="colorby" value="type"> Anime Type</label>
             <label class="radio-item"><input type="radio" name="colorby" value="year"> Release Year</label>
+            <label class="radio-item"><input type="radio" name="colorby" value="season"> Season</label>
+            <label class="radio-item"><input type="radio" name="colorby" value="score"> Score</label>
+            <label class="radio-item"><input type="radio" name="colorby" value="duration"> Duration</label>
+            <label class="radio-item"><input type="radio" name="colorby" value="country"> Country</label>
             <label class="radio-item" id="colorby-completion-row" style="display:none;">
               <input type="radio" name="colorby" value="completion"> Completion Status
             </label>
+            <label class="radio-item" id="colorby-userscore-row" style="display:none;">
+              <input type="radio" name="colorby" value="user_score"> Your Score
+            </label>
+            <label class="radio-item" id="colorby-scoredelta-row" style="display:none;">
+              <input type="radio" name="colorby" value="score_delta"> Score Delta (You vs Global)
+            </label>
+          </div>
+        </div>
+      </div>
+
+      <!-- NODE SIZE -->
+      <div class="section collapsible-section">
+        <div class="section-header" data-section="nodesize">
+          <div class="section-label">⬤ Node Size By</div>
+          <span class="collapse-icon">▾</span>
+        </div>
+        <div class="section-body" id="section-body-nodesize">
+          <div class="radio-group">
+            <label class="radio-item"><input type="radio" name="nodeSizeBy" value="default" checked> Default (uniform)</label>
+            <label class="radio-item"><input type="radio" name="nodeSizeBy" value="edges"> Edge Count</label>
+            <label class="radio-item"><input type="radio" name="nodeSizeBy" value="score"> Global Score</label>
+            <label class="radio-item" id="nodeSizeBy-userscore-row" style="display:none;">
+              <input type="radio" name="nodeSizeBy" value="user_score"> Your Score</label>
           </div>
         </div>
       </div>
@@ -100,7 +142,8 @@
           <div class="checkbox-grid" id="node-type-visibility">
             <label class="check-item"><input type="checkbox" value="anime" checked> Anime</label>
             <label class="check-item"><input type="checkbox" value="studio" checked> Studios</label>
-            <label class="check-item"><input type="checkbox" value="tag" checked> Tags</label>
+            <label class="check-item"><input type="checkbox" value="genre" checked> Genres</label>
+            <label class="check-item"><input type="checkbox" value="tag"> Tags</label>
             <label class="check-item"><input type="checkbox" value="character"> Characters</label>
             <label class="check-item"><input type="checkbox" value="staff"> Staff</label>
           </div>
@@ -114,12 +157,39 @@
           <span class="collapse-icon">▾</span>
         </div>
         <div class="section-body" id="section-body-animetype">
+          <label class="highlight-toggle">
+            <input type="checkbox" id="highlight-animetype"> Highlight instead of filter
+          </label>
           <div class="checkbox-grid" id="type-checkboxes">
             <label class="check-item"><input type="checkbox" value="TV" checked> TV</label>
             <label class="check-item"><input type="checkbox" value="MOVIE" checked> Movie</label>
             <label class="check-item"><input type="checkbox" value="OVA" checked> OVA</label>
             <label class="check-item"><input type="checkbox" value="ONA" checked> ONA</label>
             <label class="check-item"><input type="checkbox" value="SPECIAL" checked> Special</label>
+            <label class="check-item"><input type="checkbox" value="UNKNOWN" checked> Unknown</label>
+          </div>
+          <div class="section-apply-row">
+            <button class="btn btn-sm section-apply-btn">Apply Filters</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- RELEASE STATUS FILTER -->
+      <div class="section collapsible-section">
+        <div class="section-header" data-section="releasestatus">
+          <div class="section-label">📡 Release Status</div>
+          <span class="collapse-icon">▾</span>
+        </div>
+        <div class="section-body" id="section-body-releasestatus">
+          <label class="highlight-toggle">
+            <input type="checkbox" id="highlight-releasestatus"> Highlight instead of filter
+          </label>
+          <div class="checkbox-grid" id="release-status-checkboxes">
+            <label class="check-item"><input type="checkbox" value="FINISHED" checked> Finished</label>
+            <label class="check-item"><input type="checkbox" value="RELEASING" checked> Airing</label>
+            <label class="check-item"><input type="checkbox" value="NOT_YET_RELEASED" checked> Not Yet Released</label>
+            <label class="check-item"><input type="checkbox" value="CANCELLED" checked> Cancelled</label>
+            <label class="check-item"><input type="checkbox" value="HIATUS" checked> On Hiatus</label>
             <label class="check-item"><input type="checkbox" value="UNKNOWN" checked> Unknown</label>
           </div>
           <div class="section-apply-row">
@@ -135,6 +205,9 @@
           <span class="collapse-icon">▾</span>
         </div>
         <div class="section-body" id="section-body-year">
+          <label class="highlight-toggle">
+            <input type="checkbox" id="highlight-year"> Highlight instead of filter
+          </label>
           <div class="year-filter-row">
             <div class="range-input-group">
               <div class="range-input-label">FROM</div>
@@ -158,6 +231,9 @@
           <span class="collapse-icon">▾</span>
         </div>
         <div class="section-body" id="section-body-episodes">
+          <label class="highlight-toggle">
+            <input type="checkbox" id="highlight-episodes"> Highlight instead of filter
+          </label>
           <div class="range-inputs">
             <div class="range-input-group">
               <div class="range-input-label">MIN</div>
@@ -181,6 +257,9 @@
           <span class="collapse-icon">▾</span>
         </div>
         <div class="section-body" id="section-body-length">
+          <label class="highlight-toggle">
+            <input type="checkbox" id="highlight-length"> Highlight instead of filter
+          </label>
           <div class="range-inputs">
             <div class="range-input-group">
               <div class="range-input-label">MIN</div>
@@ -197,6 +276,51 @@
         </div>
       </div>
 
+      <!-- SCORE FILTER -->
+      <div class="section collapsible-section">
+        <div class="section-header" data-section="score">
+          <div class="section-label">⭐ Score Range</div>
+          <span class="collapse-icon">▾</span>
+        </div>
+        <div class="section-body" id="section-body-score">
+          <label class="highlight-toggle">
+            <input type="checkbox" id="highlight-score"> Highlight instead of filter
+          </label>
+          <div class="range-inputs">
+            <div class="range-input-group">
+              <div class="range-input-label">MIN</div>
+              <input class="num-input" id="score-min" type="number" min="0" max="10" step="0.1" value="0">
+            </div>
+            <div class="range-input-group">
+              <div class="range-input-label">MAX</div>
+              <input class="num-input" id="score-max" type="number" min="0" max="10" step="0.1" value="10">
+            </div>
+          </div>
+          <div class="section-apply-row">
+            <button class="btn btn-sm section-apply-btn">Apply Filters</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- GENRE FILTER -->
+      <div class="section collapsible-section">
+        <div class="section-header" data-section="genres">
+          <div class="section-label">🎭 Filter by Genre</div>
+          <span class="collapse-icon">▾</span>
+        </div>
+        <div class="section-body" id="section-body-genres">
+          <label class="highlight-toggle">
+            <input type="checkbox" id="highlight-genres"> Highlight instead of filter
+          </label>
+          <input class="input-field" id="genre-search" placeholder="Search genres…" style="margin-bottom:6px; width:100%;">
+          <select class="filter-select" id="genre-select" multiple></select>
+          <div class="select-footer-row">
+            <span class="filter-clear" id="genre-clear">Clear selection</span>
+            <button class="btn btn-sm section-apply-btn">Apply Filters</button>
+          </div>
+        </div>
+      </div>
+
       <!-- TAG FILTER -->
       <div class="section collapsible-section">
         <div class="section-header" data-section="tags">
@@ -204,10 +328,32 @@
           <span class="collapse-icon">▾</span>
         </div>
         <div class="section-body" id="section-body-tags">
+          <label class="highlight-toggle">
+            <input type="checkbox" id="highlight-tags"> Highlight instead of filter
+          </label>
           <input class="input-field" id="tag-search" placeholder="Search tags…" style="margin-bottom:6px; width:100%;">
           <select class="filter-select" id="tag-select" multiple></select>
           <div class="select-footer-row">
             <span class="filter-clear" id="tag-clear">Clear selection</span>
+            <button class="btn btn-sm section-apply-btn">Apply Filters</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- COUNTRY FILTER -->
+      <div class="section collapsible-section">
+        <div class="section-header" data-section="country">
+          <div class="section-label">🌏 Country of Origin</div>
+          <span class="collapse-icon">▾</span>
+        </div>
+        <div class="section-body" id="section-body-country">
+          <label class="highlight-toggle">
+            <input type="checkbox" id="highlight-country"> Highlight instead of filter
+          </label>
+          <div class="checkbox-grid" id="country-checkboxes">
+            <!-- populated dynamically -->
+          </div>
+          <div class="section-apply-row">
             <button class="btn btn-sm section-apply-btn">Apply Filters</button>
           </div>
         </div>
@@ -220,6 +366,9 @@
           <span class="collapse-icon">▾</span>
         </div>
         <div class="section-body" id="section-body-studios">
+          <label class="highlight-toggle">
+            <input type="checkbox" id="highlight-studios"> Highlight instead of filter
+          </label>
           <input class="input-field" id="studio-search" placeholder="Search studios…" style="margin-bottom:6px; width:100%;">
           <select class="filter-select" id="studio-select" multiple></select>
           <div class="select-footer-row">
@@ -236,6 +385,9 @@
           <span class="collapse-icon">▾</span>
         </div>
         <div class="section-body" id="section-body-characters">
+          <label class="highlight-toggle">
+            <input type="checkbox" id="highlight-characters"> Highlight instead of filter
+          </label>
           <input class="input-field" id="character-search" placeholder="Search characters…" style="margin-bottom:6px; width:100%;">
           <select class="filter-select" id="character-select" multiple></select>
           <div class="select-footer-row">
@@ -252,6 +404,9 @@
           <span class="collapse-icon">▾</span>
         </div>
         <div class="section-body" id="section-body-staff">
+          <label class="highlight-toggle">
+            <input type="checkbox" id="highlight-staff"> Highlight instead of filter
+          </label>
           <input class="input-field" id="staff-search" placeholder="Search staff…" style="margin-bottom:6px; width:100%;">
           <select class="filter-select" id="staff-select" multiple></select>
           <div class="select-footer-row">
@@ -278,6 +433,14 @@
         <span class="stat-val" id="stat-clusters">—</span>
       </div>
       <div class="stat-row">
+        <span class="stat-label">LARGEST CLUSTER</span>
+        <span class="stat-val" id="stat-largest-cluster">—</span>
+      </div>
+      <div class="stat-row">
+        <span class="stat-label">LONGEST CHAIN</span>
+        <span class="stat-val" id="stat-longest-chain">—</span>
+      </div>
+      <div class="stat-row">
         <span class="stat-label">EDGES</span>
         <span class="stat-val" id="stat-edges">—</span>
       </div>
@@ -285,9 +448,20 @@
         <span class="stat-label">TOTAL DB</span>
         <span class="stat-val" id="stat-total">—</span>
       </div>
+      <!-- Cluster size filter -->
+      <div class="stat-row" style="align-items:flex-start; flex-direction:column; gap:4px; margin-top:4px;">
+        <span class="stat-label">MIN CLUSTER SIZE</span>
+        <div style="display:flex; gap:6px; width:100%; align-items:center;">
+          <input class="num-input" id="min-cluster-size" type="number" min="1" value="1" style="width:60px;">
+          <button class="btn btn-sm" id="apply-cluster-size" style="flex:1;">Apply</button>
+        </div>
+      </div>
       <div class="stats-actions">
         <button class="action-btn danger-btn" id="clear-all-btn">↺ Clear All</button>
         <button class="action-btn share-btn-el" id="share-btn">⎘ Share</button>
+      </div>
+      <div class="stats-actions" style="margin-top:4px;">
+        <button class="action-btn download-btn" id="download-btn">⬇ Download List</button>
       </div>
     </div>
   </aside>
@@ -305,7 +479,7 @@
     </div>
     <div id="graph-canvas"></div>
     <div id="legend">
-      <div class="legend-title">Legend</div>
+      <div class="legend-title">Legend <span style="font-size:0.55rem;color:var(--dim);">(click to highlight)</span></div>
       <div id="legend-items"></div>
     </div>
     <div id="tooltip"></div>

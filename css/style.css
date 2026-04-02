@@ -155,7 +155,7 @@ body {
   text-transform: uppercase;
   color: var(--gold3);
   font-weight: 500;
-  margin: 0;  /* override old margin when inside header */
+  margin: 0;
 }
 
 .collapse-icon {
@@ -179,6 +179,30 @@ body {
   padding-top: 0;
   padding-bottom: 0;
   opacity: 0;
+}
+
+/* ── HIGHLIGHT TOGGLE ── */
+.highlight-toggle {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 0.68rem;
+  color: var(--dim);
+  cursor: pointer;
+  margin-bottom: 8px;
+  padding: 3px 4px;
+  border-radius: 3px;
+  transition: background 0.15s;
+  user-select: none;
+}
+.highlight-toggle:hover {
+  background: var(--glow);
+  color: var(--cream2);
+}
+.highlight-toggle input {
+  accent-color: var(--amber);
+  cursor: pointer;
+  flex-shrink: 0;
 }
 
 /* ── USERNAME ── */
@@ -216,9 +240,9 @@ body {
   display: none;
   word-break: break-word;
 }
-.user-status.loading { display: block; color: var(--gold); background: rgba(212,163,68,0.1); }
-.user-status.success { display: block; color: #40c060; background: rgba(64,192,96,0.1); }
-.user-status.error   { display: block; color: var(--red); background: rgba(192,64,48,0.1); }
+.user-status.loading { display: block; color: var(--gold);   background: rgba(212,163,68,0.1); }
+.user-status.success { display: block; color: #40c060;       background: rgba(64,192,96,0.1);  }
+.user-status.error   { display: block; color: var(--red);    background: rgba(192,64,48,0.1);  }
 
 .btn {
   background: var(--gold3);
@@ -337,6 +361,14 @@ body {
 }
 .filter-clear:hover { color: var(--gold); }
 
+/* ── MODE SELECT ── */
+#mode-select {
+  height: auto;
+  padding: 8px 10px;
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+
 /* ── STATS BAR ── */
 #stats-bar {
   padding: 10px 16px;
@@ -353,9 +385,7 @@ body {
   align-items: center;
 }
 .stat-label { font-size: 0.65rem; color: var(--dim); letter-spacing: 0.1em; }
-.stat-val { font-size: 0.75rem; color: var(--gold2); font-weight: 400; }
-
-/* apply-btn removed — replaced by per-section section-apply-btn and stats-actions */
+.stat-val   { font-size: 0.75rem; color: var(--gold2); font-weight: 400; }
 
 /* ── GRAPH AREA ── */
 #graph-wrap {
@@ -378,8 +408,8 @@ body {
   border: 1px solid var(--border2);
   border-radius: 6px;
   padding: 12px 14px;
-  min-width: 160px;
-  max-width: 200px;
+  min-width: 170px;
+  max-width: 210px;
   backdrop-filter: blur(8px);
   z-index: 5;
 }
@@ -397,6 +427,18 @@ body {
   font-size: 0.72rem;
   color: var(--cream2);
   margin-bottom: 5px;
+  border-radius: 3px;
+  padding: 2px 3px;
+  transition: background 0.15s;
+}
+.legend-item[data-legend-key]:hover {
+  background: var(--glow);
+  color: var(--cream);
+}
+.legend-item.legend-active {
+  background: var(--glow2);
+  color: var(--gold2);
+  outline: 1px solid rgba(212,163,68,0.3);
 }
 .legend-dot {
   width: 10px; height: 10px;
@@ -451,7 +493,7 @@ body {
 .tt-tags {
   font-size: 0.65rem;
   color: var(--dim);
-  margin-top: 6px;
+  margin-top: 5px;
   line-height: 1.5;
 }
 
@@ -552,6 +594,13 @@ body {
   border: 1px solid rgba(212,163,68,0.3);
 }
 .share-btn-el:hover { background: rgba(212,163,68,0.25); }
+
+.download-btn {
+  background: rgba(94,184,255,0.12);
+  color: #5eb8ff;
+  border: 1px solid rgba(94,184,255,0.28);
+}
+.download-btn:hover { background: rgba(94,184,255,0.22); }
 
 /* ── SHARE TOAST ── */
 #share-toast {

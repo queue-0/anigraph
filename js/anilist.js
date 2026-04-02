@@ -3,12 +3,14 @@
  * ----------
  * Handles fetching an AniList user's anime list.
  * Uses the public GraphQL API — no API key needed for public lists.
+ * Fetches user scores alongside list status.
  */
 
 'use strict';
 
 // userList[status] = Set of numeric AniList media IDs
 window.userList       = {};
+window.userScores     = {};  // al_id → user's score (0–100 scale, normalized to 0–10)
 window.userListLoaded = false;
 
 const ANILIST_STATUSES = ['COMPLETED','PLANNING','CURRENT','PAUSED','DROPPED','REPEATING'];
@@ -21,6 +23,7 @@ window.COMPLETION_STATUS_COLORS = {
   PAUSED:     '#c0a040',  // amber
   DROPPED:    '#c04040',  // red
   REPEATING:  '#40c0c0',  // teal
+  RELATED:    '#808080',  // grey — anime related to list entries but not explicitly listed
 };
 window.COMPLETION_STATUS_LABELS = {
   COMPLETED:  'Completed',
@@ -29,11 +32,12 @@ window.COMPLETION_STATUS_LABELS = {
   PAUSED:     'On-Hold',
   DROPPED:    'Dropped',
   REPEATING:  'Rewatching',
+  RELATED:    'Related',
 };
 
 /**
  * Fetch all lists for a given AniList username.
- * Populates window.userList and calls applyFiltersAndRender when done.
+ * Populates window.userList, window.userScores, and calls applyFiltersAndRender.
  */
 async function fetchUserList() {
   const username = document.getElementById('username-input').value.trim();
@@ -47,9 +51,11 @@ async function fetchUserList() {
   status.className   = 'user-status loading';
 
   // Reset
-  window.userList = {};
+  window.userList   = {};
+  window.userScores = {};
   window.userListLoaded = false;
   ANILIST_STATUSES.forEach(s => { window.userList[s] = new Set(); });
+  window.userList['RELATED'] = new Set();
 
   const query = `
     query ($name: String) {
@@ -58,6 +64,7 @@ async function fetchUserList() {
           status
           entries {
             mediaId
+            score(format: POINT_10_DECIMAL)
           }
         }
       }
@@ -93,19 +100,41 @@ async function fetchUserList() {
       if (!window.userList[s]) window.userList[s] = new Set();
       list.entries.forEach(e => {
         window.userList[s].add(e.mediaId);
+        // Store score if non-zero (0 means unscored)
+        if (e.score && e.score > 0) {
+          window.userScores[e.mediaId] = e.score;
+        }
         total++;
       });
     });
 
+    // Populate RELATED: anime that are graph-neighbors of list entries but not
+    // explicitly on the list. This is computed in app.js after graph loads.
     window.userListLoaded = true;
 
     status.textContent = `✓ Loaded ${total} anime from ${username}`;
     status.className   = 'user-status success';
 
-    // Show status filter + completion color-by option
+    // Show status filter + extra color-by options
     document.getElementById('list-status-filter').style.display = 'block';
     const completionRow = document.getElementById('colorby-completion-row');
     if (completionRow) completionRow.style.display = 'flex';
+    const userScoreRow = document.getElementById('colorby-userscore-row');
+    if (userScoreRow) userScoreRow.style.display = 'flex';
+    const scoreDeltaRow = document.getElementById('colorby-scoredelta-row');
+    if (scoreDeltaRow) scoreDeltaRow.style.display = 'flex';
+    const nodeSizeUserScore = document.getElementById('nodeSizeBy-userscore-row');
+    if (nodeSizeUserScore) nodeSizeUserScore.style.display = 'flex';
+
+    // Enable user mode option
+    const modeUserOpt = document.getElementById('mode-user-option');
+    if (modeUserOpt) {
+      modeUserOpt.disabled = false;
+      modeUserOpt.textContent = `My List (${total})`;
+    }
+
+    // Compute related anime from graph edges
+    computeRelatedAnime();
 
     applyFiltersAndRender();
 
@@ -116,6 +145,52 @@ async function fetchUserList() {
   } finally {
     btn.disabled = false;
   }
+}
+
+/**
+ * Walk the graph edges to find anime that are direct neighbors of list entries
+ * but not themselves on the list. Mark them as RELATED.
+ */
+function computeRelatedAnime() {
+  if (!window.rawGraph || !window.userListLoaded) return;
+
+  // Build set of all explicitly listed al_ids
+  const listedIds = new Set();
+  ANILIST_STATUSES.forEach(s => {
+    (window.userList[s] || new Set()).forEach(id => listedIds.add(id));
+  });
+
+  // Build map: al_id → node_id and node_id → al_id for anime nodes
+  const alIdToNodeId = new Map();
+  const nodeIdToAlId = new Map();
+  window.rawGraph.nodes.forEach(n => {
+    if (n.type === 'anime') {
+      alIdToNodeId.set(n.al_id, n.node_id);
+      nodeIdToAlId.set(n.node_id, n.al_id);
+    }
+  });
+
+  // Build adjacency for anime↔anime edges only
+  const animeAdj = new Map();
+  window.rawGraph.edges.forEach(e => {
+    if (e.k !== 'related') return;
+    const sAlId = nodeIdToAlId.get(e.s);
+    const tAlId = nodeIdToAlId.get(e.t);
+    if (!sAlId || !tAlId) return;
+    if (!animeAdj.has(sAlId)) animeAdj.set(sAlId, new Set());
+    if (!animeAdj.has(tAlId)) animeAdj.set(tAlId, new Set());
+    animeAdj.get(sAlId).add(tAlId);
+    animeAdj.get(tAlId).add(sAlId);
+  });
+
+  window.userList['RELATED'] = new Set();
+  listedIds.forEach(alId => {
+    (animeAdj.get(alId) || new Set()).forEach(neighborId => {
+      if (!listedIds.has(neighborId)) {
+        window.userList['RELATED'].add(neighborId);
+      }
+    });
+  });
 }
 
 /** Return a Set of all numeric IDs matching the currently-checked statuses */
@@ -132,19 +207,28 @@ function getActiveUserIds() {
 
 /**
  * Given an al_id, return the user's list status for that anime, or null.
- * Used for "Completion Status" color mode.
  */
 function getUserStatusForAnime(al_id) {
   if (!window.userListLoaded) return null;
   for (const status of ANILIST_STATUSES) {
     if (window.userList[status]?.has(al_id)) return status;
   }
+  if (window.userList['RELATED']?.has(al_id)) return 'RELATED';
   return null;
+}
+
+/**
+ * Return the user's score for an anime (0–10 scale), or null if unscored.
+ */
+function getUserScoreForAnime(al_id) {
+  if (!window.userListLoaded) return null;
+  return window.userScores[al_id] ?? null;
 }
 
 /** Clear the loaded list and reset the UI */
 function clearUserList() {
-  window.userList = {};
+  window.userList   = {};
+  window.userScores = {};
   window.userListLoaded = false;
 
   document.getElementById('user-status').textContent = '';
@@ -152,13 +236,31 @@ function clearUserList() {
   document.getElementById('username-input').value    = '';
   document.getElementById('list-status-filter').style.display = 'none';
 
-  // Hide completion color-by option and reset radio if it was selected
-  const completionRow = document.getElementById('colorby-completion-row');
-  if (completionRow) completionRow.style.display = 'none';
-  const completionRadio = document.querySelector('input[name="colorby"][value="completion"]');
-  if (completionRadio?.checked) {
+  // Hide extra color-by options and reset radio if one was selected
+  ['colorby-completion-row','colorby-userscore-row','colorby-scoredelta-row'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.style.display = 'none';
+  });
+  const nodeSizeUserScore = document.getElementById('nodeSizeBy-userscore-row');
+  if (nodeSizeUserScore) nodeSizeUserScore.style.display = 'none';
+
+  const activeColorby = document.querySelector('input[name="colorby"]:checked')?.value;
+  if (['completion','user_score','score_delta'].includes(activeColorby)) {
     document.querySelector('input[name="colorby"][value="node_type"]').checked = true;
   }
+  const activeSize = document.querySelector('input[name="nodeSizeBy"]:checked')?.value;
+  if (activeSize === 'user_score') {
+    document.querySelector('input[name="nodeSizeBy"][value="default"]').checked = true;
+  }
+
+  // Reset mode selector
+  const modeUserOpt = document.getElementById('mode-user-option');
+  if (modeUserOpt) {
+    modeUserOpt.disabled = true;
+    modeUserOpt.textContent = 'My List (load username first)';
+  }
+  const modeSelect = document.getElementById('mode-select');
+  if (modeSelect) modeSelect.value = 'all';
 
   applyFiltersAndRender();
 }
