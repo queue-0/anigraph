@@ -3,15 +3,15 @@
  * ------
  * Main application entry point.
  * Loads the pre-computed graph database, populates filter UI,
- * and wires up all events.
+ * wires up all events, and manages collapsible sidebar sections.
  */
 
 'use strict';
 
 // ── GLOBALS ───────────────────────────────────────────────────────────────────
 
-let rawGraph  = null;   // { meta, nodes, edges }
-window._nodeById = new Map();  // node_id → node (shared with graph.js tooltip)
+let rawGraph = null;
+window._nodeById = new Map();
 
 const DATA_URL = './data/anime-graph.json';
 
@@ -41,7 +41,6 @@ async function loadDatabase() {
 
   setProgress(15, 'Downloading…');
 
-  // Stream to track download progress
   const reader  = res.body.getReader();
   const decoder = new TextDecoder();
   let text = '';
@@ -50,9 +49,9 @@ async function loadDatabase() {
   while (true) {
     const { done, value } = await reader.read();
     if (done) break;
-    text      += decoder.decode(value, { stream: true });
-    received  += value?.length || 0;
-    const pct  = Math.min(50, 15 + (received / 12_000_000) * 35);
+    text     += decoder.decode(value, { stream: true });
+    received += value?.length || 0;
+    const pct = Math.min(50, 15 + (received / 12_000_000) * 35);
     setProgress(pct, `Downloading… ${(received / 1_048_576).toFixed(1)} MB`);
     await new Promise(r => setTimeout(r, 0));
   }
@@ -64,11 +63,10 @@ async function loadDatabase() {
   setProgress(65, `Building node index (${rawGraph.nodes.length.toLocaleString()} nodes)…`);
   await new Promise(r => setTimeout(r, 0));
 
-  // Build global lookup map
   rawGraph.nodes.forEach(n => window._nodeById.set(n.node_id, n));
 
   document.getElementById('stat-total').textContent =
-    (rawGraph.meta?.total_anime || rawGraph.nodes.filter(n => n.type === 'anime').length).toLocaleString();
+    (rawGraph.meta?.total_anime ?? rawGraph.nodes.filter(n => n.type === 'anime').length).toLocaleString();
 
   setProgress(75, 'Building filter lists…');
   populateFilterLists();
@@ -129,8 +127,8 @@ function fillSelect(selectId, items) {
   const sel = document.getElementById(selectId);
   if (!sel) return;
   items.forEach(name => {
-    const opt = document.createElement('option');
-    opt.value = name;
+    const opt       = document.createElement('option');
+    opt.value       = name;
     opt.textContent = name;
     sel.appendChild(opt);
   });
@@ -160,18 +158,34 @@ function wireClear(clearId, selectId) {
 function applyFiltersAndRender() {
   if (!rawGraph) return;
 
-  const filters   = getFilters();
-  const result    = buildGraphData(rawGraph, filters, window._nodeById);
+  const filters = getFilters();
+  const result  = buildGraphData(rawGraph, filters, window._nodeById);
 
   renderGraph(result);
-  buildLegend(result.filteredAnime, filters.colorBy);
+  buildLegend(result.filteredAnime, filters.colorBy, filters.visibleNodeTypes);
 
-  // Update mode pill
   const activeIds = getActiveUserIds ? getActiveUserIds() : null;
   document.querySelector('#mode-pill span').textContent =
     activeIds !== null
       ? `My List (${result.filteredAnime.length.toLocaleString()})`
       : `All Anime`;
+}
+
+// ── COLLAPSIBLE SECTIONS ──────────────────────────────────────────────────────
+
+function initCollapsibleSections() {
+  document.querySelectorAll('.section-header').forEach(header => {
+    const sectionKey = header.dataset.section;
+    const bodyId     = `section-body-${sectionKey}`;
+    const body       = document.getElementById(bodyId);
+    const icon       = header.querySelector('.collapse-icon');
+    if (!body) return;
+
+    header.addEventListener('click', () => {
+      const isCollapsed = body.classList.toggle('collapsed');
+      if (icon) icon.textContent = isCollapsed ? '▸' : '▾';
+    });
+  });
 }
 
 // ── EVENT WIRING ──────────────────────────────────────────────────────────────
@@ -196,15 +210,18 @@ document.addEventListener('DOMContentLoaded', () => {
     window._searchTimer = setTimeout(applyFiltersAndRender, 400);
   });
 
+  // Collapsible sections
+  initCollapsibleSections();
+
   // Start loading
   loadDatabase().catch(err => {
     const msg = document.getElementById('loader-msg');
-    msg.style.color      = '#c04030';
-    msg.style.maxWidth   = '420px';
-    msg.style.textAlign  = 'center';
+    msg.style.color     = '#c04030';
+    msg.style.maxWidth  = '420px';
+    msg.style.textAlign = 'center';
     msg.style.lineHeight = '1.6';
     msg.style.whiteSpace = 'pre-wrap';
-    msg.textContent      =
+    msg.textContent =
       '✗ Failed to load database.\n\n' + err.message +
       '\n\nTry refreshing, or check your network.\nSome ad-blockers may block CDN requests.';
     console.error('DB load failed:', err);

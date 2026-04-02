@@ -3,14 +3,14 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Anime Constellation — Explore the Anime Universe</title>
+<title>Anigraph — Explore the Anime Universe</title>
 <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
 
 <!-- LOADER -->
 <div id="loader">
-  <div class="loader-title">星座 · Anime Constellation</div>
+  <div class="loader-title">Anigraph</div>
   <div class="loader-subtitle">Mapping the anime universe</div>
   <div style="font-size:2rem;" class="progress-ring">⟳</div>
   <div class="loader-bar-wrap"><div class="loader-bar" id="loader-bar"></div></div>
@@ -23,158 +23,219 @@
   <!-- SIDEBAR -->
   <aside id="sidebar">
     <div class="sidebar-header">
-      <div class="sidebar-logo">星座 Anime Constellation</div>
+      <div class="sidebar-logo">Anigraph</div>
       <div class="sidebar-logo-jp">アニメ · 宇宙 · 関係図</div>
     </div>
 
     <div class="sidebar-scroll">
 
       <!-- USER LIST -->
-      <div class="section">
-        <div class="section-label">📋 Your AniList</div>
-        <div class="username-row">
-          <input class="input-field" id="username-input" placeholder="AniList username…" type="text">
-          <button class="btn" id="fetch-list-btn">Fetch</button>
+      <div class="section collapsible-section">
+        <div class="section-header" data-section="user-list">
+          <div class="section-label">📋 Your AniList</div>
+          <span class="collapse-icon">▾</span>
         </div>
-        <div class="user-status" id="user-status"></div>
-
-        <!-- Status filter checkboxes — shown after successful fetch -->
-        <div id="list-status-filter" style="display:none; margin-top:10px;">
-          <div class="section-label" style="margin-bottom:6px;">Show list statuses:</div>
-          <div class="checkbox-grid" id="list-status-checkboxes">
-            <label class="check-item"><input type="checkbox" value="COMPLETED" checked> Completed</label>
-            <label class="check-item"><input type="checkbox" value="PLANNING" checked> Plan to Watch</label>
-            <label class="check-item"><input type="checkbox" value="CURRENT" checked> Watching</label>
-            <label class="check-item"><input type="checkbox" value="PAUSED" checked> On-Hold</label>
-            <label class="check-item"><input type="checkbox" value="DROPPED" checked> Dropped</label>
-            <label class="check-item"><input type="checkbox" value="REPEATING" checked> Rewatching</label>
+        <div class="section-body" id="section-body-user-list">
+          <div class="username-row">
+            <input class="input-field" id="username-input" placeholder="AniList username…" type="text">
+            <button class="btn" id="fetch-list-btn">Fetch</button>
           </div>
-          <div style="margin-top:8px; display:flex; gap:6px;">
-            <button class="btn btn-sm" id="filter-by-list-btn">Show My List</button>
-            <button class="btn btn-sm" id="clear-list-btn"
-              style="background:var(--bg2);color:var(--dim);border:1px solid var(--border2);">Clear</button>
+          <div class="user-status" id="user-status"></div>
+
+          <div id="list-status-filter" style="display:none; margin-top:10px;">
+            <div class="section-label" style="margin-bottom:6px;">Show list statuses:</div>
+            <div class="checkbox-grid" id="list-status-checkboxes">
+              <label class="check-item"><input type="checkbox" value="COMPLETED" checked> Completed</label>
+              <label class="check-item"><input type="checkbox" value="PLANNING" checked> Planning</label>
+              <label class="check-item"><input type="checkbox" value="CURRENT" checked> Watching</label>
+              <label class="check-item"><input type="checkbox" value="PAUSED" checked> On-Hold</label>
+              <label class="check-item"><input type="checkbox" value="DROPPED" checked> Dropped</label>
+              <label class="check-item"><input type="checkbox" value="REPEATING" checked> Rewatching</label>
+            </div>
+            <div style="margin-top:8px; display:flex; gap:6px;">
+              <button class="btn btn-sm" id="filter-by-list-btn">Show My List</button>
+              <button class="btn btn-sm" id="clear-list-btn"
+                style="background:var(--bg2);color:var(--dim);border:1px solid var(--border2);">Clear</button>
+            </div>
           </div>
         </div>
       </div>
 
       <!-- SEARCH -->
-      <div class="section">
-        <div class="section-label">🔍 Search</div>
-        <input class="input-field" id="search-input" placeholder="Title, character, staff…" type="text" style="width:100%;">
+      <div class="section collapsible-section">
+        <div class="section-header" data-section="search">
+          <div class="section-label">🔍 Search</div>
+          <span class="collapse-icon">▾</span>
+        </div>
+        <div class="section-body" id="section-body-search">
+          <input class="input-field" id="search-input" placeholder="Title, character, staff…" type="text" style="width:100%;">
+        </div>
       </div>
 
       <!-- NODE COLOR -->
-      <div class="section">
-        <div class="section-label">🎨 Color Nodes By</div>
-        <div class="radio-group">
-          <label class="radio-item"><input type="radio" name="colorby" value="node_type" checked> Node Type</label>
-          <label class="radio-item"><input type="radio" name="colorby" value="type"> Anime Type</label>
-          <label class="radio-item"><input type="radio" name="colorby" value="year"> Release Year</label>
-          <label class="radio-item"><input type="radio" name="colorby" value="studio"> Studio</label>
-          <label class="radio-item"><input type="radio" name="colorby" value="tag"> Primary Tag</label>
+      <div class="section collapsible-section">
+        <div class="section-header" data-section="colorby">
+          <div class="section-label">🎨 Color Nodes By</div>
+          <span class="collapse-icon">▾</span>
+        </div>
+        <div class="section-body" id="section-body-colorby">
+          <div class="radio-group">
+            <label class="radio-item"><input type="radio" name="colorby" value="node_type" checked> Node Type</label>
+            <label class="radio-item"><input type="radio" name="colorby" value="type"> Anime Type</label>
+            <label class="radio-item"><input type="radio" name="colorby" value="year"> Release Year</label>
+            <!-- Completion status only shown when user list is loaded -->
+            <label class="radio-item" id="colorby-completion-row" style="display:none;">
+              <input type="radio" name="colorby" value="completion"> Completion Status
+            </label>
+          </div>
         </div>
       </div>
 
       <!-- NODE TYPE VISIBILITY -->
-      <div class="section">
-        <div class="section-label">👁 Show Node Types</div>
-        <div class="checkbox-grid" id="node-type-visibility">
-          <label class="check-item"><input type="checkbox" value="anime" checked> Anime</label>
-          <label class="check-item"><input type="checkbox" value="studio" checked> Studios</label>
-          <label class="check-item"><input type="checkbox" value="tag" checked> Tags</label>
-          <label class="check-item"><input type="checkbox" value="character"> Characters</label>
-          <label class="check-item"><input type="checkbox" value="staff"> Staff</label>
+      <div class="section collapsible-section">
+        <div class="section-header" data-section="nodetypes">
+          <div class="section-label">👁 Show Node Types</div>
+          <span class="collapse-icon">▾</span>
+        </div>
+        <div class="section-body" id="section-body-nodetypes">
+          <div class="checkbox-grid" id="node-type-visibility">
+            <label class="check-item"><input type="checkbox" value="anime" checked> Anime</label>
+            <label class="check-item"><input type="checkbox" value="studio" checked> Studios</label>
+            <label class="check-item"><input type="checkbox" value="tag" checked> Tags</label>
+            <label class="check-item"><input type="checkbox" value="character"> Characters</label>
+            <label class="check-item"><input type="checkbox" value="staff"> Staff</label>
+          </div>
         </div>
       </div>
 
       <!-- ANIME TYPE FILTER -->
-      <div class="section">
-        <div class="section-label">📺 Anime Type</div>
-        <div class="checkbox-grid" id="type-checkboxes">
-          <label class="check-item"><input type="checkbox" value="TV" checked> TV</label>
-          <label class="check-item"><input type="checkbox" value="MOVIE" checked> Movie</label>
-          <label class="check-item"><input type="checkbox" value="OVA" checked> OVA</label>
-          <label class="check-item"><input type="checkbox" value="ONA" checked> ONA</label>
-          <label class="check-item"><input type="checkbox" value="SPECIAL" checked> Special</label>
-          <label class="check-item"><input type="checkbox" value="UNKNOWN" checked> Unknown</label>
+      <div class="section collapsible-section">
+        <div class="section-header" data-section="animetype">
+          <div class="section-label">📺 Anime Type</div>
+          <span class="collapse-icon">▾</span>
+        </div>
+        <div class="section-body" id="section-body-animetype">
+          <div class="checkbox-grid" id="type-checkboxes">
+            <label class="check-item"><input type="checkbox" value="TV" checked> TV</label>
+            <label class="check-item"><input type="checkbox" value="MOVIE" checked> Movie</label>
+            <label class="check-item"><input type="checkbox" value="OVA" checked> OVA</label>
+            <label class="check-item"><input type="checkbox" value="ONA" checked> ONA</label>
+            <label class="check-item"><input type="checkbox" value="SPECIAL" checked> Special</label>
+            <label class="check-item"><input type="checkbox" value="UNKNOWN" checked> Unknown</label>
+          </div>
         </div>
       </div>
 
       <!-- YEAR FILTER -->
-      <div class="section">
-        <div class="section-label">📅 Release Year Range</div>
-        <div class="year-filter-row">
-          <div class="range-input-group">
-            <div class="range-input-label">FROM</div>
-            <input class="num-input" id="year-from" type="number" min="1917" max="2030" value="1917" placeholder="From">
-          </div>
-          <div class="range-input-group">
-            <div class="range-input-label">TO</div>
-            <input class="num-input" id="year-to" type="number" min="1917" max="2030" value="2030" placeholder="To">
+      <div class="section collapsible-section">
+        <div class="section-header" data-section="year">
+          <div class="section-label">📅 Release Year Range</div>
+          <span class="collapse-icon">▾</span>
+        </div>
+        <div class="section-body" id="section-body-year">
+          <div class="year-filter-row">
+            <div class="range-input-group">
+              <div class="range-input-label">FROM</div>
+              <input class="num-input" id="year-from" type="number" min="1917" max="2030" value="1917" placeholder="From">
+            </div>
+            <div class="range-input-group">
+              <div class="range-input-label">TO</div>
+              <input class="num-input" id="year-to" type="number" min="1917" max="2030" value="2030" placeholder="To">
+            </div>
           </div>
         </div>
       </div>
 
       <!-- EPISODE FILTER -->
-      <div class="section">
-        <div class="section-label">📊 Episodes Range</div>
-        <div class="range-inputs">
-          <div class="range-input-group">
-            <div class="range-input-label">MIN</div>
-            <input class="num-input" id="ep-min" type="number" min="0" value="0" placeholder="Min">
-          </div>
-          <div class="range-input-group">
-            <div class="range-input-label">MAX</div>
-            <input class="num-input" id="ep-max" type="number" min="0" value="9999" placeholder="Max">
+      <div class="section collapsible-section">
+        <div class="section-header" data-section="episodes">
+          <div class="section-label">📊 Episodes Range</div>
+          <span class="collapse-icon">▾</span>
+        </div>
+        <div class="section-body" id="section-body-episodes">
+          <div class="range-inputs">
+            <div class="range-input-group">
+              <div class="range-input-label">MIN</div>
+              <input class="num-input" id="ep-min" type="number" min="0" value="0" placeholder="Min">
+            </div>
+            <div class="range-input-group">
+              <div class="range-input-label">MAX</div>
+              <input class="num-input" id="ep-max" type="number" min="0" value="9999" placeholder="Max">
+            </div>
           </div>
         </div>
       </div>
 
       <!-- TOTAL LENGTH FILTER -->
-      <div class="section">
-        <div class="section-label">⏱ Total Length (minutes)</div>
-        <div class="range-inputs">
-          <div class="range-input-group">
-            <div class="range-input-label">MIN</div>
-            <input class="num-input" id="len-min" type="number" min="0" value="0" placeholder="Min min.">
-          </div>
-          <div class="range-input-group">
-            <div class="range-input-label">MAX</div>
-            <input class="num-input" id="len-max" type="number" min="0" value="999999" placeholder="Max min.">
+      <div class="section collapsible-section">
+        <div class="section-header" data-section="length">
+          <div class="section-label">⏱ Total Length (minutes)</div>
+          <span class="collapse-icon">▾</span>
+        </div>
+        <div class="section-body" id="section-body-length">
+          <div class="range-inputs">
+            <div class="range-input-group">
+              <div class="range-input-label">MIN</div>
+              <input class="num-input" id="len-min" type="number" min="0" value="0" placeholder="Min min.">
+            </div>
+            <div class="range-input-group">
+              <div class="range-input-label">MAX</div>
+              <input class="num-input" id="len-max" type="number" min="0" value="999999" placeholder="Max min.">
+            </div>
           </div>
         </div>
       </div>
 
       <!-- TAG FILTER -->
-      <div class="section">
-        <div class="section-label">🏷 Filter by Tag</div>
-        <input class="input-field" id="tag-search" placeholder="Search tags…" style="margin-bottom:6px; width:100%;">
-        <select class="filter-select" id="tag-select" multiple></select>
-        <span class="filter-clear" id="tag-clear">Clear selection</span>
+      <div class="section collapsible-section">
+        <div class="section-header" data-section="tags">
+          <div class="section-label">🏷 Filter by Tag</div>
+          <span class="collapse-icon">▾</span>
+        </div>
+        <div class="section-body" id="section-body-tags">
+          <input class="input-field" id="tag-search" placeholder="Search tags…" style="margin-bottom:6px; width:100%;">
+          <select class="filter-select" id="tag-select" multiple></select>
+          <span class="filter-clear" id="tag-clear">Clear selection</span>
+        </div>
       </div>
 
       <!-- STUDIO FILTER -->
-      <div class="section">
-        <div class="section-label">🏢 Filter by Studio</div>
-        <input class="input-field" id="studio-search" placeholder="Search studios…" style="margin-bottom:6px; width:100%;">
-        <select class="filter-select" id="studio-select" multiple></select>
-        <span class="filter-clear" id="studio-clear">Clear selection</span>
+      <div class="section collapsible-section">
+        <div class="section-header" data-section="studios">
+          <div class="section-label">🏢 Filter by Studio</div>
+          <span class="collapse-icon">▾</span>
+        </div>
+        <div class="section-body" id="section-body-studios">
+          <input class="input-field" id="studio-search" placeholder="Search studios…" style="margin-bottom:6px; width:100%;">
+          <select class="filter-select" id="studio-select" multiple></select>
+          <span class="filter-clear" id="studio-clear">Clear selection</span>
+        </div>
       </div>
 
       <!-- CHARACTER FILTER -->
-      <div class="section">
-        <div class="section-label">👤 Filter by Character</div>
-        <input class="input-field" id="character-search" placeholder="Search characters…" style="margin-bottom:6px; width:100%;">
-        <select class="filter-select" id="character-select" multiple></select>
-        <span class="filter-clear" id="character-clear">Clear selection</span>
+      <div class="section collapsible-section">
+        <div class="section-header" data-section="characters">
+          <div class="section-label">👤 Filter by Character</div>
+          <span class="collapse-icon">▾</span>
+        </div>
+        <div class="section-body" id="section-body-characters">
+          <input class="input-field" id="character-search" placeholder="Search characters…" style="margin-bottom:6px; width:100%;">
+          <select class="filter-select" id="character-select" multiple></select>
+          <span class="filter-clear" id="character-clear">Clear selection</span>
+        </div>
       </div>
 
       <!-- STAFF FILTER -->
-      <div class="section">
-        <div class="section-label">🎬 Filter by Staff</div>
-        <input class="input-field" id="staff-search" placeholder="Search staff…" style="margin-bottom:6px; width:100%;">
-        <select class="filter-select" id="staff-select" multiple></select>
-        <span class="filter-clear" id="staff-clear">Clear selection</span>
+      <div class="section collapsible-section">
+        <div class="section-header" data-section="staff">
+          <div class="section-label">🎬 Filter by Staff</div>
+          <span class="collapse-icon">▾</span>
+        </div>
+        <div class="section-body" id="section-body-staff">
+          <input class="input-field" id="staff-search" placeholder="Search staff…" style="margin-bottom:6px; width:100%;">
+          <select class="filter-select" id="staff-select" multiple></select>
+          <span class="filter-clear" id="staff-clear">Clear selection</span>
+        </div>
       </div>
 
     </div><!-- /sidebar-scroll -->
