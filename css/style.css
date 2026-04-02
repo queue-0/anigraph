@@ -18,7 +18,6 @@
   --glow:      rgba(212,163,68,0.15);
   --glow2:     rgba(212,163,68,0.35);
   --sidebar-w: 320px;
-  --collapse-dur: 0.2s;
 }
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -107,9 +106,9 @@ body {
 }
 .sidebar-logo {
   font-family: 'Zen Antique Soft', serif;
-  font-size: 1.4rem;
+  font-size: 1.3rem;
   color: var(--gold);
-  letter-spacing: 0.12em;
+  letter-spacing: 0.1em;
   text-shadow: 0 0 20px rgba(212,163,68,0.4);
   line-height: 1;
 }
@@ -131,54 +130,17 @@ body {
 .sidebar-scroll::-webkit-scrollbar-track { background: transparent; }
 .sidebar-scroll::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
 
-/* ── COLLAPSIBLE SECTIONS ── */
 .section {
+  padding: 14px 16px 10px;
   border-bottom: 1px solid var(--border);
 }
-
-.section-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 12px 16px 10px;
-  cursor: pointer;
-  user-select: none;
-  transition: background 0.15s;
-}
-.section-header:hover {
-  background: var(--glow);
-}
-
 .section-label {
   font-size: 0.65rem;
   letter-spacing: 0.2em;
   text-transform: uppercase;
   color: var(--gold3);
+  margin-bottom: 10px;
   font-weight: 500;
-  margin: 0;  /* override old margin when inside header */
-}
-
-.collapse-icon {
-  font-size: 0.75rem;
-  color: var(--dim);
-  transition: transform var(--collapse-dur) ease;
-  flex-shrink: 0;
-  margin-left: 6px;
-}
-
-.section-body {
-  padding: 0 16px 12px;
-  overflow: hidden;
-  max-height: 1000px;
-  transition: max-height var(--collapse-dur) ease, padding var(--collapse-dur) ease, opacity var(--collapse-dur) ease;
-  opacity: 1;
-}
-
-.section-body.collapsed {
-  max-height: 0;
-  padding-top: 0;
-  padding-bottom: 0;
-  opacity: 0;
 }
 
 /* ── USERNAME ── */
