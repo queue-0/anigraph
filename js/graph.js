@@ -39,30 +39,23 @@ function initGraph() {
   // force-graph exposes the underlying d3 simulation via .d3Force(name).
   // We mutate the existing 'charge' force rather than replacing it, to avoid
   // needing a d3 reference (which isn't exported by the force-graph UMD bundle).
-  const chargeForce = graphInstance.d3Force('charge');
-  if (chargeForce && typeof chargeForce.strength === 'function') {
-    chargeForce.strength(-120).distanceMax(600);
-  }
+  const d3Lib = (typeof d3 !== 'undefined' ? d3 : ForceGraph.d3);
 
-  // For collision we need to create a new force. force-graph ships with
-  // d3-force bundled; we can access it from the simulation object itself.
-  try {
-    const sim = graphInstance.d3Force('center')?.simulation?.() ||
-                graphInstance.d3Force('link')?.simulation?.();
-    // Retrieve d3 from the existing collision force if already set, or fall
-    // back to the global d3 if loaded separately.
-    const d3ref = (typeof d3 !== 'undefined') ? d3 : null;
-    if (d3ref) {
-      graphInstance.d3Force('collision',
-        d3ref.forceCollide(n => {
-          const base = Math.sqrt(Math.max(1, n.val || 1)) * 6;
-          return n.data?.type !== 'anime' ? base + 14 : base + 4;
-        })
-      );
-    }
-  } catch (_) {
-    // Collision enhancement optional — silently skip if d3 unavailable
-  }
+  // Overwrite Charge
+  graphInstance.d3Force('charge', d3Lib.forceManyBody()
+    .strength(-120)
+    .distanceMax(600)
+  );
+
+  // Overwrite Collision
+  graphInstance.d3Force('collision', d3Lib.forceCollide(n => {
+    const base = Math.sqrt(Math.max(1, n.val || 1)) * 6;
+    if (n.data?.type !== 'anime') return base + 14;
+    return base + 4;
+  }));
+
+  // Reheat the simulation to make sure nodes start rendering
+  graphInstance.d3ReheatSimulation();
 
   // ── Zoom controls ──────────────────────────────────────────────────────────
   document.getElementById('zoom-in').onclick  = () =>
