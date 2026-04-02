@@ -446,6 +446,39 @@ body {
   flex-shrink: 0;
 }
 
+/* Gradient bar in legend (for score/duration color modes) */
+.legend-gradient {
+  margin-bottom: 6px;
+}
+.legend-grad-bar {
+  height: 8px;
+  border-radius: 4px;
+  background: linear-gradient(90deg,
+    hsl(240,80%,55%),
+    hsl(180,80%,55%),
+    hsl(120,80%,55%),
+    hsl(60,80%,55%),
+    hsl(0,80%,55%)
+  );
+  margin-bottom: 3px;
+}
+.legend-grad-labels {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.6rem;
+  color: var(--dim);
+}
+
+/* Node type visibility group label */
+.nt-group-label {
+  font-size: 0.6rem;
+  color: var(--dim);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  margin-bottom: 4px;
+  margin-top: 2px;
+}
+
 /* ── TOOLTIP ── */
 #tooltip {
   position: absolute;

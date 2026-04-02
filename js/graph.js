@@ -1,15 +1,16 @@
 /**
  * graph.js
  * --------
- * Initialises the force-graph instance and handles:
- *  - Node hover/click with tooltip
- *  - Node selection → highlight connected anime nodes (not meta)
- *  - Relation labels on anime↔anime edges
- *  - Zoom controls
- *  - Force simulation
- *  - Node size scales with val; padding radius scales with node size
- *  - Highlight dimming for filter highlight mode
- *  - Legend click highlights
+ * Force-graph instance, rendering, interaction.
+ *
+ * Performance improvements:
+ *  - Reduced nodeRelSize; coolingTime reduced so simulation stops faster
+ *  - Collision force disabled by default (too expensive at 10k+ nodes);
+ *    only enabled when node count is below threshold
+ *  - Link canvas object (relation labels) only runs when zoomed in
+ *  - currentNodes lookup uses a Map instead of Array.find()
+ *  - warmupTicks / cooldownTicks tuned for fast initial layout
+ *  - d3 alphaDecay increased so sim stops sooner
  */
 
 'use strict';
@@ -17,13 +18,17 @@
 let graphInstance  = null;
 let showLinks      = true;
 let selectedNodeId = null;
-let neighborIds    = new Set();  // anime node_ids adjacent to selected
+let neighborIds    = new Set();
 let currentLinks   = [];
-let currentNodes   = [];
+let currentNodeMap = new Map();  // id → node (faster than find())
 
-// Legend highlight state
+// Legend highlight
 let legendHighlightKey = null;
 let legendHighlightVal = null;
+
+// ── CONSTANTS ─────────────────────────────────────────────────────────────────
+const COLLISION_NODE_THRESHOLD = 3000;  // disable collision above this count
+const NODE_REL_SIZE = 5;
 
 // ── INIT ──────────────────────────────────────────────────────────────────────
 function initGraph() {
@@ -32,7 +37,7 @@ function initGraph() {
 
   graphInstance
     .backgroundColor('#0d0a07')
-    .nodeRelSize(6)
+    .nodeRelSize(NODE_REL_SIZE)
     .nodeColor(n => resolveNodeColor(n))
     .nodeVal(n => n.val || 1)
     .nodeLabel('')
@@ -42,37 +47,39 @@ function initGraph() {
     .linkCanvasObjectMode(() => 'after')
     .linkCanvasObject((link, ctx, globalScale) => drawLinkLabel(link, ctx, globalScale))
     .onNodeHover(handleNodeHover)
-    .onNodeClick(handleNodeClick);
+    .onNodeClick(handleNodeClick)
+    // Performance: stop simulation sooner
+    .d3AlphaDecay(0.03)
+    .d3VelocityDecay(0.4)
+    .warmupTicks(30)
+    .cooldownTicks(150)
+    .cooldownTime(4000);
 
-  // Force simulation tweaks
+  // Repulsion — moderate, stops at reasonable distance
   const chargeForce = graphInstance.d3Force('charge');
-  if (chargeForce && typeof chargeForce.strength === 'function') {
-    chargeForce.strength(-150).distanceMax(700);
+  if (chargeForce?.strength) {
+    chargeForce.strength(-80).distanceMax(400);
   }
 
-  // Collision — radius scales with node val/size
+  // Collision only for smaller graphs
   try {
-    const d3ref = (typeof d3 !== 'undefined') ? d3 : null;
-    if (d3ref) {
+    if (typeof d3 !== 'undefined') {
       graphInstance.d3Force('collision',
-        d3ref.forceCollide(n => {
-          // nodeRelSize=6, so visual radius ≈ sqrt(val)*6
-          const visualR = Math.sqrt(Math.max(1, n.val || 1)) * 6;
-          const nodeType = n.data?.type;
-          const padding  = nodeType !== 'anime' ? visualR * 0.8 + 12 : visualR * 0.5 + 4;
-          return visualR + padding;
-        })
+        d3.forceCollide(n => {
+          const r = Math.sqrt(Math.max(1, n.val || 1)) * NODE_REL_SIZE;
+          return r + (n.data?.type !== 'anime' ? 8 : 3);
+        }).strength(0.5)
       );
     }
   } catch (_) {}
 
   // Zoom controls
   document.getElementById('zoom-in').onclick  = () =>
-    graphInstance.zoom(graphInstance.zoom() * 1.3, 400);
+    graphInstance.zoom(graphInstance.zoom() * 1.3, 300);
   document.getElementById('zoom-out').onclick = () =>
-    graphInstance.zoom(graphInstance.zoom() * 0.7, 400);
+    graphInstance.zoom(graphInstance.zoom() * 0.7, 300);
   document.getElementById('zoom-fit').onclick = () =>
-    graphInstance.zoomToFit(600);
+    graphInstance.zoomToFit(500);
   document.getElementById('toggle-links').onclick = () => {
     showLinks = !showLinks;
     graphInstance.linkVisibility(showLinks);
@@ -82,21 +89,18 @@ function initGraph() {
   document.getElementById('graph-canvas').addEventListener('mousemove', e => {
     const tt = document.getElementById('tooltip');
     if (tt.style.display === 'none') return;
-    const x = e.clientX + 14;
-    const y = e.clientY - 10;
-    tt.style.left = Math.min(x, window.innerWidth  - 280) + 'px';
-    tt.style.top  = Math.min(y, window.innerHeight - 220) + 'px';
+    const x = Math.min(e.clientX + 14, window.innerWidth  - 280);
+    const y = Math.min(e.clientY - 10, window.innerHeight - 240);
+    tt.style.left = x + 'px';
+    tt.style.top  = y + 'px';
   });
 
-  // Click on canvas background → deselect
+  // Background click → deselect
   document.getElementById('graph-canvas').addEventListener('click', e => {
-    if (!e._nodeClicked) {
-      clearSelection();
-      clearLegendHighlight();
-    }
+    if (!e._nodeClicked) { clearSelection(); clearLegendHighlight(); }
   });
 
-  // Legend click handler
+  // Legend click
   document.getElementById('legend').addEventListener('click', e => {
     const item = e.target.closest('.legend-item[data-legend-key]');
     if (!item) return;
@@ -110,7 +114,6 @@ function initGraph() {
       clearSelection();
       refreshColors();
     }
-    // Visual feedback
     document.querySelectorAll('.legend-item').forEach(el => el.classList.remove('legend-active'));
     if (legendHighlightKey) item.classList.add('legend-active');
   });
@@ -119,46 +122,67 @@ function initGraph() {
 // ── RENDER ────────────────────────────────────────────────────────────────────
 function renderGraph({ nodes, links, filteredAnime, highlightedAnime, visibleMeta }) {
   if (!graphInstance) return;
-  currentLinks = links;
-  currentNodes = nodes;
+  currentLinks   = links;
+  currentNodeMap = new Map(nodes.map(n => [n.id, n]));
   clearSelection();
   clearLegendHighlight();
 
+  // Disable collision for large graphs
+  try {
+    if (typeof d3 !== 'undefined') {
+      if (nodes.length > COLLISION_NODE_THRESHOLD) {
+        graphInstance.d3Force('collision', null);
+      } else {
+        graphInstance.d3Force('collision',
+          d3.forceCollide(n => {
+            const r = Math.sqrt(Math.max(1, n.val || 1)) * NODE_REL_SIZE;
+            return r + (n.data?.type !== 'anime' ? 8 : 3);
+          }).strength(0.5)
+        );
+      }
+    }
+  } catch (_) {}
+
   graphInstance.graphData({ nodes, links });
 
+  const animeCount = filteredAnime.length + (highlightedAnime?.length || 0);
   document.getElementById('stat-nodes').textContent  = filteredAnime.length.toLocaleString();
   document.getElementById('stat-meta').textContent   = visibleMeta.length.toLocaleString();
   document.getElementById('stat-edges').textContent  = links.length.toLocaleString();
 
-  const { count, largest } = calculateAnimeClusters(nodes, links);
-  document.getElementById('stat-clusters').textContent       = count.toLocaleString();
-  document.getElementById('stat-largest-cluster').textContent = largest.toLocaleString();
+  // Cluster stats (async so it doesn't block rendering)
+  setTimeout(() => {
+    const { count, largest } = calculateAnimeClusters(nodes, links);
+    document.getElementById('stat-clusters').textContent        = count.toLocaleString();
+    document.getElementById('stat-largest-cluster').textContent = largest.toLocaleString();
 
-  const chain = calculateLongestChain(nodes, links);
-  document.getElementById('stat-longest-chain').textContent  = chain.toLocaleString();
+    const minCluster = parseInt(document.getElementById('min-cluster-size')?.value) || 1;
+    if (minCluster > 1 && window.countClustersOfMinSize) {
+      const filtered = window.countClustersOfMinSize(nodes, links, minCluster);
+      document.getElementById('stat-clusters').textContent = `${filtered.toLocaleString()} (≥${minCluster})`;
+    }
 
-  setTimeout(() => graphInstance.zoomToFit(800, 50), 600);
+    const chain = calculateLongestChain(nodes, links);
+    document.getElementById('stat-longest-chain').textContent = chain.toLocaleString();
+  }, 100);
+
+  setTimeout(() => graphInstance.zoomToFit(700, 40), 500);
 }
 
 // ── SELECTION ─────────────────────────────────────────────────────────────────
 function selectNode(nodeId) {
   selectedNodeId = nodeId;
-  neighborIds = new Set();
+  neighborIds    = new Set();
 
-  // Only highlight adjacent ANIME nodes (not meta)
-  currentLinks.forEach(l => {
+  for (const l of currentLinks) {
     const src = typeof l.source === 'object' ? l.source.id : l.source;
     const tgt = typeof l.target === 'object' ? l.target.id : l.target;
     if (src === nodeId || tgt === nodeId) {
-      const otherId = src === nodeId ? tgt : src;
-      // Only add if it's an anime node
-      const otherNode = currentNodes.find(n => n.id === otherId);
-      if (otherNode?.data?.type === 'anime') {
-        neighborIds.add(otherId);
-      }
+      const otherId   = src === nodeId ? tgt : src;
+      const otherNode = currentNodeMap.get(otherId);
+      if (otherNode?.data?.type === 'anime') neighborIds.add(otherId);
     }
-  });
-
+  }
   refreshColors();
 }
 
@@ -185,26 +209,17 @@ function refreshColors() {
 function resolveNodeColor(n) {
   const base = n.color || '#e8a030';
 
-  // Highlight mode dimming (filter mismatch)
-  const isDimmedByFilter = n.dimmed === true;
-
-  // Legend highlight
   if (legendHighlightKey && !selectedNodeId) {
-    const matches = nodMatchesLegend(n, legendHighlightKey, legendHighlightVal);
-    if (!matches) return dimColor(base, 0.12);
-    return base;
+    return nodMatchesLegend(n, legendHighlightKey, legendHighlightVal)
+      ? base : dimColor(base, 0.1);
   }
 
-  // Node selection highlight
   if (selectedNodeId !== null) {
-    if (n.id === selectedNodeId) return base;
-    if (neighborIds.has(n.id)) return base;
-    return dimColor(base, 0.12);
+    if (n.id === selectedNodeId || neighborIds.has(n.id)) return base;
+    return dimColor(base, 0.1);
   }
 
-  // Filter highlight mode
-  if (isDimmedByFilter) return dimColor(base, 0.2);
-
+  if (n.dimmed) return dimColor(base, 0.18);
   return base;
 }
 
@@ -212,22 +227,22 @@ function nodMatchesLegend(n, key, val) {
   const d = n.data;
   if (!d) return false;
   switch (key) {
-    case 'type':        return d.type === val;
-    case 'anime_type':  return d.anime_type === val;
+    case 'node_type':  return d.type === 'anime';
+    case 'anime_type': return d.anime_type === val;
     case 'year_band': {
       const band = (window.YEAR_BANDS || []).find(b => b.label === val);
       if (!band) return false;
-      const prev = (window.YEAR_BANDS || []).find(b => b.max < band.max);
-      const minY = prev ? prev.max + 1 : 0;
+      const idx  = (window.YEAR_BANDS || []).indexOf(band);
+      const minY = idx > 0 ? (window.YEAR_BANDS[idx - 1].max + 1) : 0;
       return d.year >= minY && d.year <= band.max;
     }
-    case 'season':      return (d.season || 'Unknown') === val;
-    case 'country':     return (d.country || '??') === val;
+    case 'season':         return (d.season || 'Unknown') === val;
+    case 'release_status': return (d.release_status || 'UNKNOWN') === val;
     case 'completion': {
       const st = getUserStatusForAnime ? getUserStatusForAnime(d.al_id) : null;
       return st === val;
     }
-    case 'meta_type':   return d.type === val;
+    case 'meta_type': return d.type === val;
     default: return false;
   }
 }
@@ -235,58 +250,50 @@ function nodMatchesLegend(n, key, val) {
 function resolveLinkColor(l) {
   const src = typeof l.source === 'object' ? l.source.id : l.source;
   const tgt = typeof l.target === 'object' ? l.target.id : l.target;
-  const baseAlpha = (l.kind === 'related') ? 0.45 : 0.22;
+  const base = l.kind === 'related' ? 0.35 : 0.18;
 
   if (selectedNodeId !== null) {
-    if (src !== selectedNodeId && tgt !== selectedNodeId) {
-      return getLinkBaseColor(l.kind, 0.03);
-    }
-    return getLinkBaseColor(l.kind, baseAlpha);
+    if (src !== selectedNodeId && tgt !== selectedNodeId) return getLinkColor(l.kind, 0.03);
+    return getLinkColor(l.kind, base);
   }
 
   if (legendHighlightKey) {
-    const srcNode = currentNodes.find(n => n.id === src);
-    const tgtNode = currentNodes.find(n => n.id === tgt);
-    const srcMatch = srcNode && nodMatchesLegend(srcNode, legendHighlightKey, legendHighlightVal);
-    const tgtMatch = tgtNode && nodMatchesLegend(tgtNode, legendHighlightKey, legendHighlightVal);
-    if (!srcMatch && !tgtMatch) return getLinkBaseColor(l.kind, 0.03);
+    const sn = currentNodeMap.get(src);
+    const tn = currentNodeMap.get(tgt);
+    const sm = sn && nodMatchesLegend(sn, legendHighlightKey, legendHighlightVal);
+    const tm = tn && nodMatchesLegend(tn, legendHighlightKey, legendHighlightVal);
+    if (!sm && !tm) return getLinkColor(l.kind, 0.03);
   }
 
-  return getLinkBaseColor(l.kind, baseAlpha);
+  return getLinkColor(l.kind, base);
 }
 
 function resolveLinkWidth(l) {
-  if (selectedNodeId === null && !legendHighlightKey) return 0.6;
+  if (!selectedNodeId && !legendHighlightKey) return 0.5;
   const src = typeof l.source === 'object' ? l.source.id : l.source;
   const tgt = typeof l.target === 'object' ? l.target.id : l.target;
 
-  if (selectedNodeId !== null) {
-    if (src === selectedNodeId || tgt === selectedNodeId) return 2;
-    return 0.2;
+  if (selectedNodeId) {
+    return (src === selectedNodeId || tgt === selectedNodeId) ? 2 : 0.15;
   }
-
   if (legendHighlightKey) {
-    const srcNode = currentNodes.find(n => n.id === src);
-    const tgtNode = currentNodes.find(n => n.id === tgt);
-    const srcMatch = srcNode && nodMatchesLegend(srcNode, legendHighlightKey, legendHighlightVal);
-    const tgtMatch = tgtNode && nodMatchesLegend(tgtNode, legendHighlightKey, legendHighlightVal);
-    if (srcMatch || tgtMatch) return 1.5;
-    return 0.2;
+    const sn = currentNodeMap.get(src);
+    const tn = currentNodeMap.get(tgt);
+    const sm = sn && nodMatchesLegend(sn, legendHighlightKey, legendHighlightVal);
+    const tm = tn && nodMatchesLegend(tn, legendHighlightKey, legendHighlightVal);
+    return (sm || tm) ? 1.5 : 0.15;
   }
-
-  return 0.6;
+  return 0.5;
 }
 
-function getLinkBaseColor(kind, alpha) {
+function getLinkColor(kind, alpha) {
   const a = alpha.toFixed(2);
   switch (kind) {
-    case 'related':   return `rgba(255,255,255,${a})`;   // white
-    case 'studio':    return `rgba(94,184,255,${a})`;
-    case 'genre':     return `rgba(255,179,71,${a})`;
-    case 'tag':       return `rgba(93,222,154,${a})`;
-    case 'character': return `rgba(255,126,179,${a})`;
-    case 'staff':     return `rgba(192,156,255,${a})`;
-    default:          return `rgba(255,255,255,${a})`;
+    case 'related': return `rgba(255,255,255,${a})`;
+    case 'studio':  return `rgba(94,184,255,${a})`;
+    case 'genre':   return `rgba(255,179,71,${a})`;
+    case 'tag':     return `rgba(93,222,154,${a})`;
+    default:        return `rgba(255,255,255,${a})`;
   }
 }
 
@@ -303,33 +310,24 @@ function dimColor(color, opacity) {
 
 // ── LINK LABEL ────────────────────────────────────────────────────────────────
 function drawLinkLabel(link, ctx, globalScale) {
-  if (link.kind !== 'related' || !link.relationLabel) return;
-  if (globalScale < 2) return;
-
-  const src = link.source;
-  const tgt = link.target;
+  if (link.kind !== 'related' || !link.relationLabel || globalScale < 2.5) return;
+  const src = link.source, tgt = link.target;
   if (!src || !tgt || typeof src !== 'object') return;
 
   const midX = (src.x + tgt.x) / 2;
   const midY = (src.y + tgt.y) / 2;
   const label    = link.relationLabel;
-  const fontSize = Math.max(2, 8 / globalScale);
+  const fontSize = Math.max(2, 7 / globalScale);
 
   ctx.save();
-  ctx.font         = `${fontSize}px "Noto Sans JP", sans-serif`;
-  ctx.textAlign    = 'center';
+  ctx.font = `${fontSize}px sans-serif`;
+  ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-
-  const textW = ctx.measureText(label).width;
-  const pad   = fontSize * 0.4;
-  ctx.fillStyle = 'rgba(13,10,7,0.85)';
-  ctx.beginPath();
-  ctx.roundRect
-    ? ctx.roundRect(midX - textW/2 - pad, midY - fontSize/2 - pad, textW + pad*2, fontSize + pad*2, 3)
-    : ctx.rect(midX - textW/2 - pad, midY - fontSize/2 - pad, textW + pad*2, fontSize + pad*2);
-  ctx.fill();
-
-  ctx.fillStyle = 'rgba(255,255,255,0.85)';
+  const tw  = ctx.measureText(label).width;
+  const pad = fontSize * 0.35;
+  ctx.fillStyle = 'rgba(13,10,7,0.82)';
+  ctx.fillRect(midX - tw/2 - pad, midY - fontSize/2 - pad, tw + pad*2, fontSize + pad*2);
+  ctx.fillStyle = 'rgba(255,255,255,0.8)';
   ctx.fillText(label, midX, midY);
   ctx.restore();
 }
@@ -347,87 +345,69 @@ function handleNodeHover(node) {
   if (n.type === 'anime') {
     const mins    = totalMinutes(n);
     const minsStr = mins > 0 ? `${Math.round(mins)} min` : 'Unknown';
-    const studio  = (n.studio_ids || [])
-      .map(id => window._nodeById?.get(id)?.name).filter(Boolean).join(', ') || '—';
-    const genres  = (n.genre_ids || [])
-      .slice(0, 5).map(id => window._nodeById?.get(id)?.name).filter(Boolean).join(', ');
-    const tags    = (n.tag_ids || [])
-      .slice(0, 5).map(id => window._nodeById?.get(id)?.name).filter(Boolean).join(', ');
+    const studio  = (n.studio_ids || []).map(id => window._nodeById?.get(id)?.name).filter(Boolean).join(', ') || '—';
+    const genres  = (n.genre_ids  || []).slice(0,6).map(id => window._nodeById?.get(id)?.name).filter(Boolean).join(', ');
+    const tags    = (n.tag_ids    || []).slice(0,5).map(id => window._nodeById?.get(id)?.name).filter(Boolean).join(', ');
     const score   = n.score ? n.score.toFixed(2) : '—';
-    const year    = n.year  || '?';
-    const season  = n.season || '';
-    const country = window.COUNTRY_LABELS?.[n.country || '??'] || n.country || '?';
 
     let statusBadge = '';
     if (window.userListLoaded && getUserStatusForAnime) {
       const st = getUserStatusForAnime(n.al_id);
       if (st) {
-        const col   = (window.COMPLETION_STATUS_COLORS || {})[st] || '#808080';
-        const label = (window.COMPLETION_STATUS_LABELS || {})[st] || st;
+        const col   = (window.COMPLETION_STATUS_COLORS||{})[st]||'#808080';
+        const label = (window.COMPLETION_STATUS_LABELS||{})[st]||st;
         statusBadge = `<div class="tt-badge" style="background:${col}22;color:${col};">${label}</div>`;
       }
     }
-
     let userScoreRow = '';
     if (window.userListLoaded && getUserScoreForAnime) {
       const us = getUserScoreForAnime(n.al_id);
       if (us != null) {
         const delta = n.score ? (us - n.score).toFixed(2) : null;
-        userScoreRow = `<div class="tt-row"><span class="tt-key">Your Score</span> ${us.toFixed(1)}${delta !== null ? ` <span style="color:${parseFloat(delta)>=0?'#6c6':'#c66'}">(${parseFloat(delta)>0?'+':''}${delta})</span>` : ''}</div>`;
+        const sign  = delta !== null && parseFloat(delta) >= 0 ? '+' : '';
+        const col   = delta !== null ? (parseFloat(delta) >= 0 ? '#6c6' : '#c66') : '';
+        userScoreRow = `<div class="tt-row"><span class="tt-key">Your Score</span> ${us.toFixed(1)}${delta !== null ? ` <span style="color:${col}">(${sign}${delta})</span>` : ''}</div>`;
       }
     }
+
+    const rsLabel = (window.RELEASE_STATUS_LABELS||{})[n.release_status] || n.release_status || '?';
 
     html = `
       <div class="tt-title">${esc(n.title)}</div>
       ${n.title_en && n.title_en !== n.title ? `<div class="tt-subtitle">${esc(n.title_en)}</div>` : ''}
       <div class="tt-badge" style="background:rgba(232,160,48,0.15);color:var(--gold2);">${n.anime_type}</div>
       ${statusBadge}
-      <div class="tt-row"><span class="tt-key">Season</span> ${season} ${year}</div>
-      <div class="tt-row"><span class="tt-key">Episodes</span> ${n.episodes || '?'}</div>
+      <div class="tt-row"><span class="tt-key">Season</span> ${n.season||''} ${n.year||'?'}</div>
+      <div class="tt-row"><span class="tt-key">Status</span> ${rsLabel}</div>
+      <div class="tt-row"><span class="tt-key">Episodes</span> ${n.episodes||'?'}</div>
       <div class="tt-row"><span class="tt-key">Studio</span> ${esc(studio)}</div>
-      <div class="tt-row"><span class="tt-key">Country</span> ${esc(country)}</div>
       <div class="tt-row"><span class="tt-key">Duration</span> ${minsStr}</div>
       <div class="tt-row"><span class="tt-key">Score</span> ${score}</div>
       ${userScoreRow}
-      <div class="tt-row"><span class="tt-key">Status</span> ${n.release_status || '?'}</div>
       ${genres ? `<div class="tt-tags"><b>Genres:</b> ${esc(genres)}</div>` : ''}
-      ${tags   ? `<div class="tt-tags"><b>Tags:</b> ${esc(tags)}</div>`   : ''}
-    `;
+      ${tags   ? `<div class="tt-tags"><b>Tags:</b> ${esc(tags)}</div>` : ''}`;
+
   } else if (n.type === 'studio') {
-    html = `<div class="tt-title">${esc(n.name)}</div>
-      <div class="tt-badge" style="background:rgba(94,184,255,0.15);color:#5eb8ff;">Studio</div>`;
+    html = `<div class="tt-title">${esc(n.name)}</div><div class="tt-badge" style="background:rgba(94,184,255,0.15);color:#5eb8ff;">Studio</div>`;
   } else if (n.type === 'genre') {
-    html = `<div class="tt-title">${esc(n.name)}</div>
-      <div class="tt-badge" style="background:rgba(255,179,71,0.15);color:#ffb347;">Genre</div>`;
+    html = `<div class="tt-title">${esc(n.name)}</div><div class="tt-badge" style="background:rgba(255,179,71,0.15);color:#ffb347;">Genre</div>`;
   } else if (n.type === 'tag') {
-    html = `<div class="tt-title">${esc(n.name)}</div>
-      <div class="tt-badge" style="background:rgba(93,222,154,0.15);color:#5dde9a;">Tag</div>`;
-  } else if (n.type === 'character') {
-    html = `<div class="tt-title">${esc(n.name)}</div>
-      <div class="tt-badge" style="background:rgba(255,126,179,0.15);color:#ff7eb3;">Character</div>`;
-  } else if (n.type === 'staff') {
-    html = `<div class="tt-title">${esc(n.name)}</div>
-      <div class="tt-badge" style="background:rgba(192,156,255,0.15);color:#c09cff;">Staff</div>`;
+    html = `<div class="tt-title">${esc(n.name)}</div><div class="tt-badge" style="background:rgba(93,222,154,0.15);color:#5dde9a;">Tag</div>`;
   }
 
-  tt.innerHTML      = html;
-  tt.style.display  = 'block';
+  tt.innerHTML     = html;
+  tt.style.display = 'block';
 }
 
 function handleNodeClick(node, event) {
   if (!node) return;
   if (event) event._nodeClicked = true;
 
-  // Toggle selection
-  if (selectedNodeId === node.id) {
-    clearSelection();
-    return;
-  }
+  if (selectedNodeId === node.id) { clearSelection(); return; }
 
   clearLegendHighlight();
   selectNode(node.id);
 
-  // Open AniList page for anime nodes
   if (node.data?.type === 'anime' && node.data?.al_url) {
     window.open(node.data.al_url, '_blank');
   }
