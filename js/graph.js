@@ -21,20 +21,15 @@ let currentLinks   = [];     // last rendered links (for neighbor lookup)
 
 function initGraph() {
   const wrap = document.getElementById('graph-canvas');
-  if (!wrap) {
-    console.error("Could not find element #graph-canvas");
-    return;
-  }
-
-  // 1. Initialize the instance IMMEDIATELY so it's not null
   graphInstance = ForceGraph()(wrap);
+  
+  const d3Lib = ForceGraph.d3;
 
-  // 2. Apply basic configuration
   graphInstance
     .backgroundColor('#0d0a07')
     .nodeRelSize(6)
     .nodeColor(n => resolveNodeColor(n))
-    .nodeLabel('') 
+    .nodeLabel('')                    // custom tooltip
     .linkColor(l => resolveLinkColor(l))
     .linkWidth(l => resolveLinkWidth(l))
     .linkDirectionalArrowLength(0)
@@ -43,38 +38,70 @@ function initGraph() {
     .onNodeHover(handleNodeHover)
     .onNodeClick(handleNodeClick);
 
-  // 3. Define Forces safely
-  // Access D3 from the window (d3-force CDN) or the ForceGraph internal export
-  const d3Lib = window.d3 || ForceGraph.d3;
-
-  if (d3Lib) {
-    graphInstance.d3Force('charge', d3Lib.forceManyBody().strength(-120).distanceMax(600));
-    graphInstance.d3Force('collision', d3Lib.forceCollide(n => {
-        const base = Math.sqrt(Math.max(1, n.val || 1)) * 6;
-        return (n.data?.type !== 'anime') ? base + 14 : base + 4;
-    }));
-  } else {
-    console.warn("D3 library not detected. Forces may not behave as expected.");
+  // ── Force simulation tweaks ────────────────────────────────────────────────
+  // force-graph exposes the underlying d3 simulation via .d3Force(name).
+  // We mutate the existing 'charge' force rather than replacing it, to avoid
+  // needing a d3 reference (which isn't exported by the force-graph UMD bundle).
+  const chargeForce = graphInstance.d3Force('charge');
+  if (chargeForce && typeof chargeForce.strength === 'function') {
+    chargeForce.strength(-120).distanceMax(600);
   }
 
-  // 4. Wire up remaining UI events
-  document.getElementById('zoom-in').onclick  = () => graphInstance.zoom(graphInstance.zoom() * 1.3, 400);
-  document.getElementById('zoom-out').onclick = () => graphInstance.zoom(graphInstance.zoom() * 0.7, 400);
-  document.getElementById('zoom-fit').onclick = () => graphInstance.zoomToFit(600);
+  // For collision we need to create a new force. force-graph ships with
+  // d3-force bundled; we can access it from the simulation object itself.
+  try {
+    const sim = graphInstance.d3Force('center')?.simulation?.() ||
+                graphInstance.d3Force('link')?.simulation?.();
+    // Retrieve d3 from the existing collision force if already set, or fall
+    // back to the global d3 if loaded separately.
+    const d3ref = (typeof d3 !== 'undefined') ? d3 : null;
+    if (d3ref) {
+      graphInstance.d3Force('collision',
+        d3ref.forceCollide(n => {
+          const base = Math.sqrt(Math.max(1, n.val || 1)) * 6;
+          return n.data?.type !== 'anime' ? base + 14 : base + 4;
+        })
+      );
+    }
+  } catch (_) {
+    // Collision enhancement optional — silently skip if d3 unavailable
+  }
+
+  // ── Zoom controls ──────────────────────────────────────────────────────────
+  document.getElementById('zoom-in').onclick  = () =>
+    graphInstance.zoom(graphInstance.zoom() * 1.3, 400);
+  document.getElementById('zoom-out').onclick = () =>
+    graphInstance.zoom(graphInstance.zoom() * 0.7, 400);
+  document.getElementById('zoom-fit').onclick = () =>
+    graphInstance.zoomToFit(600);
   document.getElementById('toggle-links').onclick = () => {
     showLinks = !showLinks;
     graphInstance.linkVisibility(showLinks);
   };
 
-  // Click on background to deselect
-  wrap.addEventListener('click', e => {
-    if (!e._nodeClicked) clearSelection();
+  // ── Tooltip mouse tracking ─────────────────────────────────────────────────
+  document.getElementById('graph-canvas').addEventListener('mousemove', e => {
+    const tt = document.getElementById('tooltip');
+    if (tt.style.display === 'none') return;
+    const x = e.clientX + 14;
+    const y = e.clientY - 10;
+    tt.style.left = Math.min(x, window.innerWidth  - 280) + 'px';
+    tt.style.top  = Math.min(y, window.innerHeight - 220) + 'px';
+  });
+
+  // Click on canvas background → deselect
+  document.getElementById('graph-canvas').addEventListener('click', e => {
+    // Only deselect if the click was NOT on a node (node click fires onNodeClick first)
+    if (!e._nodeClicked) {
+      clearSelection();
+    }
   });
 }
 
 // ── RENDER ────────────────────────────────────────────────────────────────────
 
 function renderGraph({ nodes, links, filteredAnime, visibleMeta }) {
+  if (!graphInstance) return; // Prevent crashes if data loads before the engine is ready
   currentLinks = links;
   clearSelection();
 

@@ -49,6 +49,8 @@ async function fetchWithTimeout(url, ms) {
 }
 
 async function loadDatabase() {
+  setProgress(0, 'Initialising graph engine…');
+  initGraph();
   setProgress(5, 'Fetching anime graph database…');
   let res;
   try {
@@ -86,9 +88,6 @@ async function loadDatabase() {
 
   setProgress(82, 'Restoring filter state…');
   await restoreFromUrl();
-
-  setProgress(88, 'Initialising graph engine…');
-  initGraph();
 
   setProgress(95, 'Rendering initial graph…');
   applyFiltersAndRender();
