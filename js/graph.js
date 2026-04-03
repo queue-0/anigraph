@@ -1,11 +1,13 @@
 /**
  * graph.js — Anigraph
  *
- * Layout: warmupTicks run synchronously (blocking on a worker-like RAF loop),
- * then positions are frozen. A loading overlay shows progress during warmup.
- * Meta nodes get strong outward centrifugal pre-positioning.
- * Jittered initial positions prevent circle formations.
+ * Physics: runs warmupTicks synchronously, then onEngineStop freezes all node
+ * positions (fx/fy) so the simulation never runs again. Node dragging is disabled.
+ *
+ * Cluster/chain highlight: stores node IDs (which equal node_id from rawGraph),
+ * persists across render calls, and is checked in resolveNodeColor per frame.
  */
+
 'use strict';
 
 let graphInstance  = null;
@@ -14,40 +16,16 @@ let selectedNodeId = null;
 let neighborIds    = new Set();
 let currentLinks   = [];
 let currentNodeMap = new Map();
+
+// Legend highlight
 let legendHighlightKey = null;
 let legendHighlightVal = null;
+
+// Cluster / chain highlight — persisted across renders
 let _highlightedClusterIds = null;
 let _highlightedChainIds   = null;
 
 const NODE_REL_SIZE = 5;
-
-// ── RENDER LOADING OVERLAY ─────────────────────────────────────────────────────
-function showRenderOverlay(msg) {
-  let el = document.getElementById('render-overlay');
-  if (!el) {
-    el = document.createElement('div');
-    el.id = 'render-overlay';
-    el.innerHTML = `
-      <div class="render-overlay-inner">
-        <div class="render-overlay-msg" id="render-overlay-msg"></div>
-        <div class="render-overlay-bar-wrap"><div class="render-overlay-bar" id="render-overlay-bar"></div></div>
-      </div>`;
-    document.getElementById('graph-wrap')?.appendChild(el);
-  }
-  document.getElementById('render-overlay-msg').textContent = msg || 'Computing layout…';
-  document.getElementById('render-overlay-bar').style.width = '0%';
-  el.style.display = 'flex';
-}
-function updateRenderOverlay(pct, msg) {
-  const bar = document.getElementById('render-overlay-bar');
-  const msg_el = document.getElementById('render-overlay-msg');
-  if (bar) bar.style.width = Math.round(pct) + '%';
-  if (msg_el && msg) msg_el.textContent = msg;
-}
-function hideRenderOverlay() {
-  const el = document.getElementById('render-overlay');
-  if (el) el.style.display = 'none';
-}
 
 // ── INIT ──────────────────────────────────────────────────────────────────────
 function initGraph() {
@@ -68,31 +46,26 @@ function initGraph() {
     .onNodeHover(handleNodeHover)
     .onNodeClick(handleNodeClick)
     .enableNodeDrag(false)
-    .d3AlphaDecay(0.04)
-    .d3VelocityDecay(0.5)
-    .warmupTicks(0)     // we handle warmup manually in renderGraph
+    // Warmup then completely stop
+    .d3AlphaDecay(0.05)
+    .d3VelocityDecay(0.6)
+    .warmupTicks(120)
     .cooldownTicks(0)
     .cooldownTime(0)
     .onEngineStop(() => {
+      // Freeze every node in place
       const gd = graphInstance.graphData();
       gd.nodes.forEach(n => { n.fx = n.x; n.fy = n.y; });
-      hideRenderOverlay();
     });
 
-  // Tuned charge: strong, distance-limited to avoid pulling distant clusters
+  // Charge force: strong repulsion so nodes spread out nicely
   const charge = graphInstance.d3Force('charge');
-  if (charge?.strength) charge.strength(-200).distanceMax(500).theta(0.9);
+  if (charge?.strength) charge.strength(-150).distanceMax(600);
 
-  // Link distance: gives clusters space to breathe
-  graphInstance.d3Force('link')?.distance(l => {
-    // Meta↔anime links get longer distance to push meta to periphery
-    const sn = currentNodeMap.get(typeof l.source === 'object' ? l.source.id : l.source);
-    const tn = currentNodeMap.get(typeof l.target === 'object' ? l.target.id : l.target);
-    const hasMeta = (sn?.data?.type !== 'anime') || (tn?.data?.type !== 'anime');
-    return hasMeta ? 120 : 45;
-  }).strength(0.6);
+  // No link distance force — let charge handle spread
+  graphInstance.d3Force('link')?.distance(40).strength(0.5);
 
-  // No collision — too expensive at scale
+  // No collision — too expensive at 10k+ nodes
   graphInstance.d3Force('collision', null);
 
   // ── Zoom controls ─────────────────────────────────────────────────────────
@@ -109,15 +82,18 @@ function initGraph() {
     const tt = document.getElementById('tooltip');
     if (tt.style.display === 'none') return;
     const vw = window.innerWidth, vh = window.innerHeight;
-    const x = (e.clientX + 14 + 290 > vw) ? e.clientX - 300 : e.clientX + 14;
-    const y = Math.min(e.clientY - 10, vh - 270);
-    tt.style.left = x + 'px'; tt.style.top = y + 'px';
+    const x = (e.clientX + 14 + 280 > vw) ? e.clientX - 290 : e.clientX + 14;
+    const y = Math.min(e.clientY - 10, vh - 260);
+    tt.style.left = x + 'px';
+    tt.style.top  = y + 'px';
   });
 
-  // ── Background click ───────────────────────────────────────────────────────
+  // ── Background click → clear everything ───────────────────────────────────
   document.getElementById('graph-canvas').addEventListener('click', e => {
     if (!e._nodeClicked) {
-      clearSelection(); clearLegendHighlight(); clearClusterChainHighlight();
+      clearSelection();
+      clearLegendHighlight();
+      clearClusterChainHighlight();
     }
   });
 
@@ -125,105 +101,19 @@ function initGraph() {
   document.getElementById('legend').addEventListener('click', e => {
     const item = e.target.closest('.legend-item[data-legend-key]');
     if (!item) return;
-    const key = item.dataset.legendKey, val = item.dataset.legendVal;
+    const key = item.dataset.legendKey;
+    const val = item.dataset.legendVal;
     if (legendHighlightKey === key && legendHighlightVal === val) {
       clearLegendHighlight();
     } else {
-      legendHighlightKey = key; legendHighlightVal = val;
-      clearSelection(); clearClusterChainHighlight(); refreshColors();
+      legendHighlightKey = key;
+      legendHighlightVal = val;
+      clearSelection();
+      clearClusterChainHighlight();
+      refreshColors();
     }
     document.querySelectorAll('.legend-item').forEach(el => el.classList.remove('legend-active'));
     if (legendHighlightKey) item.classList.add('legend-active');
-  });
-}
-
-// ── PRE-POSITION nodes to break circular formations ───────────────────────────
-function prePositionNodes(nodes, links) {
-  const W = graphInstance.width()  || window.innerWidth  * 0.75;
-  const H = graphInstance.height() || window.innerHeight;
-
-  // Build adjacency for connected-component detection
-  const adjMap = new Map();
-  nodes.forEach(n => adjMap.set(n.id, []));
-  links.forEach(l => {
-    const s = typeof l.source === 'object' ? l.source.id : l.source;
-    const t = typeof l.target === 'object' ? l.target.id : l.target;
-    if (adjMap.has(s)) adjMap.get(s).push(t);
-    if (adjMap.has(t)) adjMap.get(t).push(s);
-  });
-
-  // Find connected components
-  const visited = new Set();
-  const components = []; // array of node-id arrays
-  for (const n of nodes) {
-    if (visited.has(n.id)) continue;
-    const comp = [];
-    const stack = [n.id];
-    visited.add(n.id);
-    while (stack.length) {
-      const cur = stack.pop();
-      comp.push(cur);
-      for (const nb of (adjMap.get(cur) || [])) {
-        if (!visited.has(nb)) { visited.add(nb); stack.push(nb); }
-      }
-    }
-    components.push(comp);
-  }
-  // Sort largest first
-  components.sort((a, b) => b.length - a.length);
-
-  // Pack components using a simple grid arrangement with spacing
-  const nodeById = new Map(nodes.map(n => [n.id, n]));
-  const totalNodes = nodes.length;
-  const baseRadius = Math.sqrt(totalNodes) * 12;
-
-  // Lay out components in a rough grid of clusters
-  const cols = Math.ceil(Math.sqrt(components.length));
-  components.forEach((comp, ci) => {
-    const col = ci % cols;
-    const row = Math.floor(ci / cols);
-    const cx  = (col - cols / 2 + 0.5) * baseRadius * 1.8;
-    const cy  = (row - Math.ceil(components.length / cols) / 2 + 0.5) * baseRadius * 1.8;
-
-    const compSize = comp.length;
-    const clusterR = Math.max(60, Math.sqrt(compSize) * 18);
-
-    // Separate meta and anime nodes in the component
-    const animeIds = comp.filter(id => nodeById.get(id)?.data?.type === 'anime');
-    const metaIds  = comp.filter(id => nodeById.get(id)?.data?.type !== 'anime');
-
-    // Anime nodes: spiral layout for variety
-    animeIds.forEach((id, i) => {
-      const n = nodeById.get(id);
-      if (!n) return;
-      const angle  = i * 2.4; // golden angle approx
-      const radius = Math.sqrt(i + 1) * (clusterR / Math.sqrt(animeIds.length + 1));
-      // Add jitter to break symmetry
-      const jx = (Math.random() - 0.5) * radius * 0.5;
-      const jy = (Math.random() - 0.5) * radius * 0.5;
-      n.x = cx + Math.cos(angle) * radius + jx;
-      n.y = cy + Math.sin(angle) * radius + jy;
-    });
-
-    // Meta nodes: push to outer ring beyond anime
-    metaIds.forEach((id, i) => {
-      const n = nodeById.get(id);
-      if (!n) return;
-      const angle  = (i / Math.max(metaIds.length, 1)) * Math.PI * 2;
-      const radius = clusterR * 1.8 + Math.random() * clusterR * 0.4;
-      n.x = cx + Math.cos(angle) * radius;
-      n.y = cy + Math.sin(angle) * radius;
-    });
-  });
-
-  // Isolated nodes (no edges): scatter in periphery
-  nodes.forEach(n => {
-    if (n.x === undefined) {
-      const angle  = Math.random() * Math.PI * 2;
-      const radius = baseRadius * 2 + Math.random() * baseRadius;
-      n.x = Math.cos(angle) * radius;
-      n.y = Math.sin(angle) * radius;
-    }
   });
 }
 
@@ -231,7 +121,7 @@ function prePositionNodes(nodes, links) {
 function renderGraph({ nodes, links, filteredAnime, highlightedAnime, visibleMeta }) {
   if (!graphInstance) return;
 
-  // Un-freeze all nodes
+  // Un-freeze all nodes so the new layout can compute
   nodes.forEach(n => { delete n.fx; delete n.fy; delete n.x; delete n.y; });
 
   currentLinks   = links;
@@ -239,49 +129,21 @@ function renderGraph({ nodes, links, filteredAnime, highlightedAnime, visibleMet
 
   clearSelection();
   clearLegendHighlight();
+  // Do NOT call clearClusterChainHighlight here — preserve highlight across re-renders
 
-  // Pre-position nodes to break circle formations
-  prePositionNodes(nodes, links);
-
-  // Show loading overlay
-  const warmupCount = nodes.length > 8000 ? 50 : nodes.length > 3000 ? 80 : nodes.length > 1000 ? 120 : 180;
-  showRenderOverlay(`Computing layout… (${nodes.length.toLocaleString()} nodes)`);
-
-  // Set warmup ticks and let onEngineStop hide the overlay
   graphInstance
-    .warmupTicks(warmupCount)
+    .warmupTicks(nodes.length > 5000 ? 60 : nodes.length > 1000 ? 100 : 150)
     .cooldownTicks(0)
     .cooldownTime(0);
 
   graphInstance.graphData({ nodes, links });
-
-  // Animate overlay progress bar during warmup (approximate)
-  const startTime = performance.now();
-  const estimatedMs = warmupCount * (nodes.length > 5000 ? 8 : nodes.length > 1000 ? 4 : 2);
-  const progressInterval = setInterval(() => {
-    const elapsed = performance.now() - startTime;
-    const pct = Math.min(95, (elapsed / estimatedMs) * 100);
-    updateRenderOverlay(pct);
-    if (pct >= 95) clearInterval(progressInterval);
-  }, 100);
-  // Ensure interval is cleared when engine stops
-  graphInstance.onEngineStop(() => {
-    clearInterval(progressInterval);
-    updateRenderOverlay(100, 'Freezing positions…');
-    const gd = graphInstance.graphData();
-    gd.nodes.forEach(n => { n.fx = n.x; n.fy = n.y; });
-    setTimeout(() => {
-      hideRenderOverlay();
-      graphInstance.zoomToFit(600, 40);
-    }, 200);
-  });
 
   // Stats
   document.getElementById('stat-nodes').textContent = filteredAnime.length.toLocaleString();
   document.getElementById('stat-meta').textContent  = visibleMeta.length.toLocaleString();
   document.getElementById('stat-edges').textContent = links.length.toLocaleString();
 
-  // Cluster + chain stats async
+  // Cluster + chain stats — async to not block render
   setTimeout(() => {
     const { count, largest, largestClusterIds } = calculateAnimeClusters(nodes, links);
     document.getElementById('stat-clusters').textContent        = count.toLocaleString();
@@ -297,25 +159,36 @@ function renderGraph({ nodes, links, filteredAnime, highlightedAnime, visibleMet
     const { length: chainLen, ids: chainIds } = calculateLongestChain(nodes, links);
     document.getElementById('stat-longest-chain').textContent = chainLen.toLocaleString();
     window._longestChainIds = chainIds;
+
+    // If a cluster/chain highlight was active before re-render, re-apply if IDs still valid
+    if (_highlightedClusterIds && window._largestClusterIds) {
+      // keep it set — colors will resolve correctly on next frame
+    }
     refreshColors();
-  }, 100);
+  }, 80);
+
+  setTimeout(() => graphInstance.zoomToFit(700, 40), 800);
 }
 
 // ── CLUSTER / CHAIN HIGHLIGHT ─────────────────────────────────────────────────
 function highlightLargestCluster() {
   if (!window._largestClusterIds?.size) return;
-  clearSelection(); clearLegendHighlight();
+  clearSelection();
+  clearLegendHighlight();
   _highlightedClusterIds = window._largestClusterIds;
   _highlightedChainIds   = null;
   refreshColors();
 }
+
 function highlightLongestChain() {
   if (!window._longestChainIds?.size) return;
-  clearSelection(); clearLegendHighlight();
+  clearSelection();
+  clearLegendHighlight();
   _highlightedChainIds   = window._longestChainIds;
   _highlightedClusterIds = null;
   refreshColors();
 }
+
 function clearClusterChainHighlight() {
   _highlightedClusterIds = null;
   _highlightedChainIds   = null;
@@ -337,12 +210,20 @@ function selectNode(nodeId) {
   }
   refreshColors();
 }
-function clearSelection()      { selectedNodeId = null; neighborIds = new Set(); refreshColors(); }
+
+function clearSelection() {
+  selectedNodeId = null;
+  neighborIds    = new Set();
+  refreshColors();
+}
+
 function clearLegendHighlight() {
-  legendHighlightKey = null; legendHighlightVal = null;
+  legendHighlightKey = null;
+  legendHighlightVal = null;
   document.querySelectorAll('.legend-item').forEach(el => el.classList.remove('legend-active'));
   refreshColors();
 }
+
 function refreshColors() {
   if (!graphInstance) return;
   graphInstance.nodeColor(n => resolveNodeColor(n));
@@ -353,35 +234,48 @@ function refreshColors() {
 // ── COLOR RESOLVERS ───────────────────────────────────────────────────────────
 function resolveNodeColor(n) {
   const base = n.color || '#e8a030';
+
+  // Cluster/chain highlight
   const activeSet = _highlightedClusterIds || _highlightedChainIds;
-  if (activeSet) return activeSet.has(n.id) ? base : dimColor(base, 0.07);
-  if (legendHighlightKey && !selectedNodeId)
+  if (activeSet) {
+    return activeSet.has(n.id) ? base : dimColor(base, 0.07);
+  }
+
+  // Legend highlight
+  if (legendHighlightKey && !selectedNodeId) {
     return nodeMatchesLegend(n, legendHighlightKey, legendHighlightVal) ? base : dimColor(base, 0.08);
+  }
+
+  // Node selection
   if (selectedNodeId !== null) {
     if (n.id === selectedNodeId || neighborIds.has(n.id)) return base;
     return dimColor(base, 0.08);
   }
+
   if (n.dimmed) return dimColor(base, 0.18);
   return base;
 }
 
 function nodeMatchesLegend(n, key, val) {
-  const d = n.data; if (!d) return false;
+  const d = n.data;
+  if (!d) return false;
   switch (key) {
+    case 'node_type':      return d.type === 'anime';
     case 'anime_type':     return d.anime_type === val;
     case 'year_band': {
-      const band = (window.YEAR_BANDS||[]).find(b=>b.label===val); if (!band) return false;
-      const idx  = (window.YEAR_BANDS||[]).indexOf(band);
-      const minY = idx>0 ? (window.YEAR_BANDS[idx-1].max+1) : 0;
-      return d.year>=minY && d.year<=band.max;
+      const band = (window.YEAR_BANDS || []).find(b => b.label === val);
+      if (!band) return false;
+      const idx  = (window.YEAR_BANDS || []).indexOf(band);
+      const minY = idx > 0 ? (window.YEAR_BANDS[idx-1].max + 1) : 0;
+      return d.year >= minY && d.year <= band.max;
     }
-    case 'season':         return (d.season||'Unknown')===val;
-    case 'release_status': return (d.release_status||'UNKNOWN')===val;
+    case 'season':         return (d.season || 'Unknown') === val;
+    case 'release_status': return (d.release_status || 'UNKNOWN') === val;
     case 'completion': {
       const st = getUserStatusForAnime ? getUserStatusForAnime(d.al_id) : null;
-      return st===val;
+      return st === val;
     }
-    case 'meta_type': return d.type===val;
+    case 'meta_type':      return d.type === val;
     default: return false;
   }
 }
@@ -390,53 +284,64 @@ function resolveLinkColor(l) {
   const src = typeof l.source === 'object' ? l.source.id : l.source;
   const tgt = typeof l.target === 'object' ? l.target.id : l.target;
   const base = (l.kind === 'related') ? 0.35 : 0.18;
+
   const activeSet = _highlightedClusterIds || _highlightedChainIds;
   if (activeSet) {
     if (!activeSet.has(src) && !activeSet.has(tgt)) return getLinkColor(l.kind, 0.02);
     return getLinkColor(l.kind, base);
   }
+
   if (selectedNodeId !== null) {
     if (src !== selectedNodeId && tgt !== selectedNodeId) return getLinkColor(l.kind, 0.02);
     return getLinkColor(l.kind, base);
   }
+
   if (legendHighlightKey) {
-    const sn = currentNodeMap.get(src), tn = currentNodeMap.get(tgt);
-    if (!nodeMatchesLegend(sn, legendHighlightKey, legendHighlightVal) &&
-        !nodeMatchesLegend(tn, legendHighlightKey, legendHighlightVal))
-      return getLinkColor(l.kind, 0.02);
+    const sn = currentNodeMap.get(src);
+    const tn = currentNodeMap.get(tgt);
+    const sm = sn && nodeMatchesLegend(sn, legendHighlightKey, legendHighlightVal);
+    const tm = tn && nodeMatchesLegend(tn, legendHighlightKey, legendHighlightVal);
+    if (!sm && !tm) return getLinkColor(l.kind, 0.02);
   }
+
   return getLinkColor(l.kind, base);
 }
 
 function resolveLinkWidth(l) {
   const activeSet = _highlightedClusterIds || _highlightedChainIds;
   if (!selectedNodeId && !legendHighlightKey && !activeSet) return 0.5;
+
   const src = typeof l.source === 'object' ? l.source.id : l.source;
   const tgt = typeof l.target === 'object' ? l.target.id : l.target;
-  if (activeSet) return (activeSet.has(src) && activeSet.has(tgt)) ? 2.5 : 0.1;
-  if (selectedNodeId) return (src===selectedNodeId||tgt===selectedNodeId) ? 2.5 : 0.1;
+
+  if (activeSet) {
+    return (activeSet.has(src) && activeSet.has(tgt)) ? 2.5 : 0.1;
+  }
+  if (selectedNodeId) {
+    return (src === selectedNodeId || tgt === selectedNodeId) ? 2.5 : 0.1;
+  }
   if (legendHighlightKey) {
-    const sn = currentNodeMap.get(src), tn = currentNodeMap.get(tgt);
-    return (nodeMatchesLegend(sn,legendHighlightKey,legendHighlightVal)||
-            nodeMatchesLegend(tn,legendHighlightKey,legendHighlightVal)) ? 1.5 : 0.1;
+    const sn = currentNodeMap.get(src);
+    const tn = currentNodeMap.get(tgt);
+    const sm = sn && nodeMatchesLegend(sn, legendHighlightKey, legendHighlightVal);
+    const tm = tn && nodeMatchesLegend(tn, legendHighlightKey, legendHighlightVal);
+    return (sm || tm) ? 1.5 : 0.1;
   }
   return 0.5;
 }
 
 function getLinkColor(kind, alpha) {
   const a = alpha.toFixed(2);
-  // Use CSS vars for configurable colors via window.LINK_COLORS override
-  const LC = window.LINK_COLORS || {};
   switch (kind) {
-    case 'related':         return `rgba(${LC.related  ||'255,255,255'},${a})`;
-    case 'studio':          return `rgba(${LC.studio   ||'94,184,255'},${a})`;
-    case 'genre':           return `rgba(${LC.genre    ||'200,130,255'},${a})`;
-    case 'tag':             return `rgba(${LC.tag      ||'93,222,154'},${a})`;
-    case 'anime_type':      return `rgba(${LC.anime_type||'240,160,48'},${a})`;
-    case 'season_node':     return `rgba(${LC.season_node||'136,204,68'},${a})`;
-    case 'year_node':       return `rgba(${LC.year_node||'102,170,255'},${a})`;
-    case 'status_node':     return `rgba(${LC.status_node||'221,136,170'},${a})`;
-    case 'completion_node': return `rgba(${LC.completion_node||'64,192,128'},${a})`;
+    case 'related':         return `rgba(255,255,255,${a})`;
+    case 'studio':          return `rgba(94,184,255,${a})`;
+    case 'genre':           return `rgba(255,179,71,${a})`;
+    case 'tag':             return `rgba(93,222,154,${a})`;
+    case 'anime_type':      return `rgba(240,160,48,${a})`;
+    case 'season_node':     return `rgba(136,204,68,${a})`;
+    case 'year_node':       return `rgba(102,170,255,${a})`;
+    case 'status_node':     return `rgba(221,136,170,${a})`;
+    case 'completion_node': return `rgba(64,192,128,${a})`;
     default:                return `rgba(255,255,255,${a})`;
   }
 }
@@ -453,15 +358,16 @@ function drawLinkLabel(link, ctx, globalScale) {
   if (link.kind !== 'related' || !link.relationLabel || globalScale < 2.5) return;
   const src = link.source, tgt = link.target;
   if (!src || !tgt || typeof src !== 'object') return;
-  const midX = (src.x+tgt.x)/2, midY = (src.y+tgt.y)/2;
-  const fontSize = Math.max(2, 7/globalScale);
+  const midX = (src.x + tgt.x) / 2, midY = (src.y + tgt.y) / 2;
+  const fontSize = Math.max(2, 7 / globalScale);
   ctx.save();
   ctx.font = `${fontSize}px sans-serif`;
-  ctx.textAlign='center'; ctx.textBaseline='middle';
-  const tw = ctx.measureText(link.relationLabel).width, pad = fontSize*0.35;
-  ctx.fillStyle='rgba(13,10,7,0.82)';
-  ctx.fillRect(midX-tw/2-pad, midY-fontSize/2-pad, tw+pad*2, fontSize+pad*2);
-  ctx.fillStyle='rgba(255,255,255,0.8)';
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  const tw = ctx.measureText(link.relationLabel).width;
+  const pad = fontSize * 0.35;
+  ctx.fillStyle = 'rgba(13,10,7,0.82)';
+  ctx.fillRect(midX - tw/2 - pad, midY - fontSize/2 - pad, tw + pad*2, fontSize + pad*2);
+  ctx.fillStyle = 'rgba(255,255,255,0.8)';
   ctx.fillText(link.relationLabel, midX, midY);
   ctx.restore();
 }
@@ -469,33 +375,44 @@ function drawLinkLabel(link, ctx, globalScale) {
 // ── TOOLTIP ───────────────────────────────────────────────────────────────────
 function handleNodeHover(node) {
   const tt = document.getElementById('tooltip');
-  if (!node) { tt.style.display='none'; return; }
+  if (!node) { tt.style.display = 'none'; return; }
   const n = node.data;
-  if (!n) { tt.style.display='none'; return; }
-  let html='';
-  if (n.type==='anime') {
-    const mins=totalMinutes(n), minsStr=mins>0?`${Math.round(mins)} min`:'Unknown';
-    const studio=(n.studio_ids||[]).map(id=>window._nodeById?.get(id)?.name).filter(Boolean).join(', ')||'—';
-    const genreNames=[
+  if (!n) { tt.style.display = 'none'; return; }
+
+  let html = '';
+  if (n.type === 'anime') {
+    const mins    = totalMinutes(n);
+    const minsStr = mins > 0 ? `${Math.round(mins)} min` : 'Unknown';
+    const studio  = (n.studio_ids||[]).map(id=>window._nodeById?.get(id)?.name).filter(Boolean).join(', ')||'—';
+    const genreNames = [
       ...(n.genre_ids||[]).map(id=>window._nodeById?.get(id)?.name),
-      ...(n.tag_ids||[]).map(id=>{const nd=window._nodeById?.get(id);return(nd&&window.GENRE_TAGS?.has(nd.name))?nd.name:null;}),
+      ...(n.tag_ids||[]).map(id=>{ const nd=window._nodeById?.get(id); return (nd&&window.GENRE_TAGS?.has(nd.name))?nd.name:null; }),
     ].filter(Boolean).slice(0,6);
-    const tagNames=(n.tag_ids||[]).map(id=>window._nodeById?.get(id)?.name).filter(name=>name&&!window.GENRE_TAGS?.has(name)).slice(0,5);
-    const score=n.score?n.score.toFixed(2):'—';
-    let statusBadge='';
-    if(window.userListLoaded&&getUserStatusForAnime){
-      const st=getUserStatusForAnime(n.al_id);
-      if(st){const col=(window.COMPLETION_STATUS_COLORS||{})[st]||'#808080',lbl=(window.COMPLETION_STATUS_LABELS||{})[st]||st;
-        statusBadge=`<div class="tt-badge" style="background:${col}22;color:${col};">${lbl}</div>`;}
+    const tagNames = (n.tag_ids||[]).map(id=>window._nodeById?.get(id)?.name).filter(name=>name&&!window.GENRE_TAGS?.has(name)).slice(0,5);
+    const score = n.score ? n.score.toFixed(2) : '—';
+
+    let statusBadge = '';
+    if (window.userListLoaded && getUserStatusForAnime) {
+      const st = getUserStatusForAnime(n.al_id);
+      if (st) {
+        const col=(window.COMPLETION_STATUS_COLORS||{})[st]||'#808080';
+        const lbl=(window.COMPLETION_STATUS_LABELS||{})[st]||st;
+        statusBadge=`<div class="tt-badge" style="background:${col}22;color:${col};">${lbl}</div>`;
+      }
     }
-    let userScoreRow='';
-    if(window.userListLoaded&&getUserScoreForAnime){
-      const us=getUserScoreForAnime(n.al_id);
-      if(us!=null){const delta=n.score?(us-n.score).toFixed(2):null,sign=delta!==null&&parseFloat(delta)>=0?'+':'',col=delta!==null?(parseFloat(delta)>=0?'#6c6':'#c66'):'';
-        userScoreRow=`<div class="tt-row"><span class="tt-key">Your Score</span> ${us.toFixed(1)}${delta!==null?` <span style="color:${col}">(${sign}${delta})</span>`:''}</div>`;}
+    let userScoreRow = '';
+    if (window.userListLoaded && getUserScoreForAnime) {
+      const us = getUserScoreForAnime(n.al_id);
+      if (us != null) {
+        const delta = n.score ? (us - n.score).toFixed(2) : null;
+        const sign  = delta !== null && parseFloat(delta) >= 0 ? '+' : '';
+        const col   = delta !== null ? (parseFloat(delta) >= 0 ? '#6c6' : '#c66') : '';
+        userScoreRow=`<div class="tt-row"><span class="tt-key">Your Score</span> ${us.toFixed(1)}${delta!==null?` <span style="color:${col}">(${sign}${delta})</span>`:''}</div>`;
+      }
     }
     const rsLabel=(window.RELEASE_STATUS_LABELS||{})[n.release_status]||n.release_status||'?';
-    html=`<div class="tt-title">${esc(n.title)}</div>
+    html=`
+      <div class="tt-title">${esc(n.title)}</div>
       ${n.title_en&&n.title_en!==n.title?`<div class="tt-subtitle">${esc(n.title_en)}</div>`:''}
       <div class="tt-badge" style="background:rgba(232,160,48,0.15);color:var(--gold2);">${n.anime_type}</div>
       ${statusBadge}
@@ -509,25 +426,33 @@ function handleNodeHover(node) {
       ${genreNames.length?`<div class="tt-tags"><b>Genres:</b> ${esc(genreNames.join(', '))}</div>`:''}
       ${tagNames.length?`<div class="tt-tags"><b>Tags:</b> ${esc(tagNames.join(', '))}</div>`:''}`;
   } else if (n._virtualMeta) {
-    const typeLabel={anime_type:'Anime Type',season_node:'Season',year_node:'Year Band',status_node:'Airing Status',completion_node:'List Status'}[n.type]||n.type;
+    const typeLabel = {
+      anime_type:'Anime Type', season_node:'Season', year_node:'Year Band',
+      status_node:'Airing Status', completion_node:'List Status',
+    }[n.type] || n.type;
     html=`<div class="tt-title">${esc(n.name)}</div><div class="tt-badge" style="background:${n._color}22;color:${n._color};">${typeLabel}</div>`;
-  } else if (n.type==='studio') {
+  } else if (n.type === 'studio') {
     html=`<div class="tt-title">${esc(n.name)}</div><div class="tt-badge" style="background:rgba(94,184,255,0.15);color:#5eb8ff;">Studio</div>`;
-  } else if (n.type==='genre') {
-    const gc=window.CONFIGURABLE_COLORS?.genre||'#c882ff';
-    html=`<div class="tt-title">${esc(n.name)}</div><div class="tt-badge" style="background:${gc}22;color:${gc};">Genre</div>`;
-  } else if (n.type==='tag') {
+  } else if (n.type === 'genre') {
+    html=`<div class="tt-title">${esc(n.name)}</div><div class="tt-badge" style="background:rgba(255,179,71,0.15);color:#ffb347;">Genre</div>`;
+  } else if (n.type === 'tag') {
     html=`<div class="tt-title">${esc(n.name)}</div><div class="tt-badge" style="background:rgba(93,222,154,0.15);color:#5dde9a;">Tag</div>`;
   }
-  tt.innerHTML=html; tt.style.display='block';
+
+  tt.innerHTML = html;
+  tt.style.display = 'block';
 }
 
 function handleNodeClick(node, event) {
   if (!node) return;
   if (event) event._nodeClicked = true;
-  if (selectedNodeId===node.id) { clearSelection(); return; }
-  clearLegendHighlight(); clearClusterChainHighlight(); selectNode(node.id);
-  if (node.data?.type==='anime' && node.data?.al_url) window.open(node.data.al_url,'_blank');
+  if (selectedNodeId === node.id) { clearSelection(); return; }
+  clearLegendHighlight();
+  clearClusterChainHighlight();
+  selectNode(node.id);
+  if (node.data?.type === 'anime' && node.data?.al_url) {
+    window.open(node.data.al_url, '_blank');
+  }
 }
 
 function esc(str) {

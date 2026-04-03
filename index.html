@@ -103,11 +103,12 @@
         </div>
         <div class="section-body" id="section-body-colorby">
           <div class="radio-group">
-            <label class="radio-item"><input type="radio" name="colorby" value="score" checked> Score (gradient)</label>
+            <label class="radio-item"><input type="radio" name="colorby" value="node_type" checked> Node Type</label>
             <label class="radio-item"><input type="radio" name="colorby" value="type"> Anime Type</label>
             <label class="radio-item"><input type="radio" name="colorby" value="year"> Release Year</label>
             <label class="radio-item"><input type="radio" name="colorby" value="season"> Season</label>
             <label class="radio-item"><input type="radio" name="colorby" value="release_status"> Airing Status</label>
+            <label class="radio-item"><input type="radio" name="colorby" value="score"> Score (gradient)</label>
             <label class="radio-item"><input type="radio" name="colorby" value="duration"> Duration (gradient)</label>
             <label class="radio-item" id="colorby-completion-row" style="display:none;">
               <input type="radio" name="colorby" value="completion"> Completion Status</label>
@@ -148,11 +149,11 @@
             <div class="checkbox-grid">
               <label class="check-item"><input type="checkbox" value="anime" checked> Anime</label>
               <label class="check-item"><input type="checkbox" value="studio" checked> Studios</label>
-              <label class="check-item"><input type="checkbox" value="genre"> Genres</label>
+              <label class="check-item"><input type="checkbox" value="genre" checked> Genres</label>
               <label class="check-item"><input type="checkbox" value="tag"> Tags</label>
             </div>
             <div class="nt-group-label" style="margin-top:8px;">Color-category meta nodes</div>
-            <div style="font-size:0.62rem;color:var(--dim);margin-bottom:4px;line-height:1.4;">Virtual nodes grouping anime by category.</div>
+            <div style="font-size:0.62rem;color:var(--dim);margin-bottom:4px;line-height:1.4;">Virtual nodes connecting anime to their category. Auto-hide when their color mode is active.</div>
             <div class="checkbox-grid">
               <label class="check-item"><input type="checkbox" value="anime_type"> Anime Types</label>
               <label class="check-item"><input type="checkbox" value="season_node"> Seasons</label>
@@ -176,11 +177,11 @@
           </label>
           <div class="checkbox-grid" id="type-checkboxes">
             <label class="check-item"><input type="checkbox" value="TV" checked> TV</label>
-            <label class="check-item"><input type="checkbox" value="MOVIE"> Movie</label>
-            <label class="check-item"><input type="checkbox" value="OVA"> OVA</label>
-            <label class="check-item"><input type="checkbox" value="ONA"> ONA</label>
-            <label class="check-item"><input type="checkbox" value="SPECIAL"> Special</label>
-            <label class="check-item"><input type="checkbox" value="UNKNOWN"> Unknown</label>
+            <label class="check-item"><input type="checkbox" value="MOVIE" checked> Movie</label>
+            <label class="check-item"><input type="checkbox" value="OVA" checked> OVA</label>
+            <label class="check-item"><input type="checkbox" value="ONA" checked> ONA</label>
+            <label class="check-item"><input type="checkbox" value="SPECIAL" checked> Special</label>
+            <label class="check-item"><input type="checkbox" value="UNKNOWN" checked> Unknown</label>
           </div>
           <div class="section-apply-row">
             <button class="btn btn-sm section-apply-btn">Apply Filters</button>
@@ -229,7 +230,7 @@
             </div>
             <div class="range-input-group">
               <div class="range-input-label">TO</div>
-              <input class="num-input" id="year-to" type="number" min="1917" max="2030" value="2026">
+              <input class="num-input" id="year-to" type="number" min="1917" max="2030" value="2030">
             </div>
           </div>
           <div class="section-apply-row">
@@ -277,7 +278,7 @@
           <div class="range-inputs">
             <div class="range-input-group">
               <div class="range-input-label">MIN</div>
-              <input class="num-input" id="len-min" type="number" min="0" value="30">
+              <input class="num-input" id="len-min" type="number" min="0" value="0">
             </div>
             <div class="range-input-group">
               <div class="range-input-label">MAX</div>
@@ -418,7 +419,7 @@
       </div>
       <div class="stats-actions" style="margin-top:4px;">
         <button class="action-btn download-btn" id="download-btn">&#11015; Download List</button>
-        <button class="action-btn" id="config-btn" style="background:rgba(212,163,68,0.1);color:var(--gold);border:1px solid rgba(212,163,68,0.25);" title="Edit node colors">&#9881; Colors</button>
+        <button class="action-btn" id="debug-anilist-btn" style="background:rgba(180,100,255,0.12);color:#c090ff;border:1px solid rgba(180,100,255,0.28);" title="Download raw AniList data as JSON for debugging">&#128029; Debug</button>
       </div>
     </div>
   </aside>
@@ -444,21 +445,6 @@
 
   <!-- MOBILE OVERLAY (closes sidebar on tap outside) -->
   <div id="sidebar-overlay"></div>
-
-  <!-- CONFIG PANEL -->
-  <div id="config-panel">
-    <div id="config-panel-inner">
-      <div id="config-header">
-        <div style="font-family:'Zen Antique Soft',serif;font-size:1.1rem;color:var(--gold);letter-spacing:0.1em;">Color Config</div>
-        <button id="config-close-btn" class="ctrl-btn" style="width:28px;height:28px;font-size:0.85rem;">&#10005;</button>
-      </div>
-      <div id="config-color-rows"></div>
-      <div id="config-footer">
-        <button class="btn btn-sm" id="config-reset-btn" style="background:var(--bg2);color:var(--dim);border:1px solid var(--border2);">Reset All</button>
-        <button class="btn" id="config-apply-btn">Apply Colors</button>
-      </div>
-    </div>
-  </div>
 
 </div><!-- /app -->
 
