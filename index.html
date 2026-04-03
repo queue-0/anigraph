@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>Anigraph — Explore the Anime Universe</title>
 <link rel="stylesheet" href="css/style.css">
 </head>
@@ -12,19 +12,27 @@
 <div id="loader">
   <div class="loader-title">Anigraph</div>
   <div class="loader-subtitle">Mapping the anime universe</div>
-  <div style="font-size:2rem;" class="progress-ring">⟳</div>
+  <div style="font-size:2rem;" class="progress-ring">&#x27F3;</div>
   <div class="loader-bar-wrap"><div class="loader-bar" id="loader-bar"></div></div>
-  <div id="loader-msg">Initializing…</div>
+  <div id="loader-msg">Initializing...</div>
 </div>
 
 <!-- APP -->
 <div id="app" style="display:none;">
 
+  <!-- SIDEBAR OPEN BUTTON (shown when sidebar is collapsed) -->
+  <button id="sidebar-open-btn" title="Open sidebar" aria-label="Open sidebar">&#9776;</button>
+
   <!-- SIDEBAR -->
   <aside id="sidebar">
     <div class="sidebar-header">
-      <div class="sidebar-logo">Anigraph</div>
-      <div class="sidebar-logo-jp">アニメ · 宇宙 · 関係図</div>
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
+        <div>
+          <div class="sidebar-logo">Anigraph</div>
+          <div class="sidebar-logo-jp">&#12450;&#12491;&#12513; &middot; &#23431;&#23449; &middot; &#38306;&#20418;&#22259;</div>
+        </div>
+        <button id="sidebar-collapse-btn" class="ctrl-btn" title="Collapse sidebar" style="flex-shrink:0;width:28px;height:28px;font-size:0.8rem;">&#9664;</button>
+      </div>
     </div>
 
     <div class="sidebar-scroll">
@@ -32,12 +40,12 @@
       <!-- USER LIST -->
       <div class="section collapsible-section">
         <div class="section-header" data-section="user-list">
-          <div class="section-label">📋 Your AniList</div>
-          <span class="collapse-icon">▾</span>
+          <div class="section-label">&#128203; Your AniList</div>
+          <span class="collapse-icon">&#9660;</span>
         </div>
         <div class="section-body" id="section-body-user-list">
           <div class="username-row">
-            <input class="input-field" id="username-input" placeholder="AniList username…" type="text">
+            <input class="input-field" id="username-input" placeholder="AniList username..." type="text" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
             <button class="btn" id="fetch-list-btn">Fetch</button>
           </div>
           <div class="user-status" id="user-status"></div>
@@ -65,11 +73,11 @@
       <!-- MODES -->
       <div class="section collapsible-section">
         <div class="section-header" data-section="modes">
-          <div class="section-label">🎮 Mode</div>
-          <span class="collapse-icon">▾</span>
+          <div class="section-label">&#127918; Mode</div>
+          <span class="collapse-icon">&#9660;</span>
         </div>
         <div class="section-body" id="section-body-modes">
-          <select class="filter-select" id="mode-select" style="height:auto; padding:8px;">
+          <select class="filter-select" id="mode-select" style="height:auto; padding:8px; cursor:pointer;">
             <option value="all">All Anime</option>
             <option value="user" id="mode-user-option" disabled>My List (load username first)</option>
           </select>
@@ -79,19 +87,19 @@
       <!-- SEARCH -->
       <div class="section collapsible-section">
         <div class="section-header" data-section="search">
-          <div class="section-label">🔍 Search</div>
-          <span class="collapse-icon">▾</span>
+          <div class="section-label">&#128269; Search</div>
+          <span class="collapse-icon">&#9660;</span>
         </div>
         <div class="section-body" id="section-body-search">
-          <input class="input-field" id="search-input" placeholder="Title…" type="text" style="width:100%;">
+          <input class="input-field" id="search-input" placeholder="Title..." type="text" style="width:100%;" autocomplete="off">
         </div>
       </div>
 
       <!-- NODE COLOR -->
       <div class="section collapsible-section">
         <div class="section-header" data-section="colorby">
-          <div class="section-label">🎨 Color Nodes By</div>
-          <span class="collapse-icon">▾</span>
+          <div class="section-label">&#127912; Color Nodes By</div>
+          <span class="collapse-icon">&#9660;</span>
         </div>
         <div class="section-body" id="section-body-colorby">
           <div class="radio-group">
@@ -115,13 +123,13 @@
       <!-- NODE SIZE -->
       <div class="section collapsible-section">
         <div class="section-header" data-section="nodesize">
-          <div class="section-label">⬤ Node Size By</div>
-          <span class="collapse-icon">▾</span>
+          <div class="section-label">&#9711; Node Size By</div>
+          <span class="collapse-icon">&#9660;</span>
         </div>
         <div class="section-body" id="section-body-nodesize">
           <div class="radio-group">
             <label class="radio-item"><input type="radio" name="nodeSizeBy" value="default" checked> Default (uniform)</label>
-            <label class="radio-item"><input type="radio" name="nodeSizeBy" value="edges"> Edge Count</label>
+            <label class="radio-item"><input type="radio" name="nodeSizeBy" value="edges"> Edge Count %</label>
             <label class="radio-item"><input type="radio" name="nodeSizeBy" value="score"> Global Score</label>
             <label class="radio-item" id="nodeSizeBy-userscore-row" style="display:none;">
               <input type="radio" name="nodeSizeBy" value="user_score"> Your Score</label>
@@ -132,8 +140,8 @@
       <!-- NODE TYPE VISIBILITY -->
       <div class="section collapsible-section">
         <div class="section-header" data-section="nodetypes">
-          <div class="section-label">👁 Show Node Types</div>
-          <span class="collapse-icon">▾</span>
+          <div class="section-label">&#128065; Show Node Types</div>
+          <span class="collapse-icon">&#9660;</span>
         </div>
         <div class="section-body" id="section-body-nodetypes">
           <div class="nt-group-label">Graph nodes</div>
@@ -143,18 +151,14 @@
             <label class="check-item"><input type="checkbox" value="genre" checked> Genres</label>
             <label class="check-item"><input type="checkbox" value="tag"> Tags</label>
           </div>
-          <!-- Character / Staff commented out
-          <label class="check-item"><input type="checkbox" value="character"> Characters</label>
-          <label class="check-item"><input type="checkbox" value="staff"> Staff</label>
-          -->
         </div>
       </div>
 
       <!-- ANIME TYPE FILTER -->
       <div class="section collapsible-section">
         <div class="section-header" data-section="animetype">
-          <div class="section-label">📺 Anime Type</div>
-          <span class="collapse-icon">▾</span>
+          <div class="section-label">&#128250; Anime Type</div>
+          <span class="collapse-icon">&#9660;</span>
         </div>
         <div class="section-body" id="section-body-animetype">
           <label class="highlight-toggle">
@@ -177,8 +181,8 @@
       <!-- RELEASE STATUS FILTER -->
       <div class="section collapsible-section">
         <div class="section-header" data-section="releasestatus">
-          <div class="section-label">📡 Airing Status</div>
-          <span class="collapse-icon">▾</span>
+          <div class="section-label">&#128225; Airing Status</div>
+          <span class="collapse-icon">&#9660;</span>
         </div>
         <div class="section-body" id="section-body-releasestatus">
           <label class="highlight-toggle">
@@ -201,8 +205,8 @@
       <!-- YEAR FILTER -->
       <div class="section collapsible-section">
         <div class="section-header" data-section="year">
-          <div class="section-label">📅 Release Year Range</div>
-          <span class="collapse-icon">▾</span>
+          <div class="section-label">&#128197; Release Year Range</div>
+          <span class="collapse-icon">&#9660;</span>
         </div>
         <div class="section-body" id="section-body-year">
           <label class="highlight-toggle">
@@ -227,8 +231,8 @@
       <!-- EPISODE FILTER -->
       <div class="section collapsible-section">
         <div class="section-header" data-section="episodes">
-          <div class="section-label">📊 Episodes Range</div>
-          <span class="collapse-icon">▾</span>
+          <div class="section-label">&#128202; Episodes Range</div>
+          <span class="collapse-icon">&#9660;</span>
         </div>
         <div class="section-body" id="section-body-episodes">
           <label class="highlight-toggle">
@@ -253,8 +257,8 @@
       <!-- LENGTH FILTER -->
       <div class="section collapsible-section">
         <div class="section-header" data-section="length">
-          <div class="section-label">⏱ Total Length (minutes)</div>
-          <span class="collapse-icon">▾</span>
+          <div class="section-label">&#9201; Total Length (minutes)</div>
+          <span class="collapse-icon">&#9660;</span>
         </div>
         <div class="section-body" id="section-body-length">
           <label class="highlight-toggle">
@@ -279,8 +283,8 @@
       <!-- SCORE FILTER -->
       <div class="section collapsible-section">
         <div class="section-header" data-section="score">
-          <div class="section-label">⭐ Score Range</div>
-          <span class="collapse-icon">▾</span>
+          <div class="section-label">&#11088; Score Range</div>
+          <span class="collapse-icon">&#9660;</span>
         </div>
         <div class="section-body" id="section-body-score">
           <label class="highlight-toggle">
@@ -305,14 +309,14 @@
       <!-- GENRE FILTER -->
       <div class="section collapsible-section">
         <div class="section-header" data-section="genres">
-          <div class="section-label">🎭 Filter by Genre</div>
-          <span class="collapse-icon">▾</span>
+          <div class="section-label">&#127917; Filter by Genre</div>
+          <span class="collapse-icon">&#9660;</span>
         </div>
         <div class="section-body" id="section-body-genres">
           <label class="highlight-toggle">
             <input type="checkbox" id="highlight-genres"> Highlight instead of filter
           </label>
-          <input class="input-field" id="genre-search" placeholder="Search genres…" style="margin-bottom:6px;width:100%;">
+          <input class="input-field" id="genre-search" placeholder="Search genres..." style="margin-bottom:6px;width:100%;" autocomplete="off">
           <select class="filter-select" id="genre-select" multiple></select>
           <div class="select-footer-row">
             <span class="filter-clear" id="genre-clear">Clear selection</span>
@@ -324,14 +328,14 @@
       <!-- TAG FILTER -->
       <div class="section collapsible-section">
         <div class="section-header" data-section="tags">
-          <div class="section-label">🏷 Filter by Tag</div>
-          <span class="collapse-icon">▾</span>
+          <div class="section-label">&#127991; Filter by Tag</div>
+          <span class="collapse-icon">&#9660;</span>
         </div>
         <div class="section-body" id="section-body-tags">
           <label class="highlight-toggle">
             <input type="checkbox" id="highlight-tags"> Highlight instead of filter
           </label>
-          <input class="input-field" id="tag-search" placeholder="Search tags…" style="margin-bottom:6px;width:100%;">
+          <input class="input-field" id="tag-search" placeholder="Search tags..." style="margin-bottom:6px;width:100%;" autocomplete="off">
           <select class="filter-select" id="tag-select" multiple></select>
           <div class="select-footer-row">
             <span class="filter-clear" id="tag-clear">Clear selection</span>
@@ -343,14 +347,14 @@
       <!-- STUDIO FILTER -->
       <div class="section collapsible-section">
         <div class="section-header" data-section="studios">
-          <div class="section-label">🏢 Filter by Studio</div>
-          <span class="collapse-icon">▾</span>
+          <div class="section-label">&#127970; Filter by Studio</div>
+          <span class="collapse-icon">&#9660;</span>
         </div>
         <div class="section-body" id="section-body-studios">
           <label class="highlight-toggle">
             <input type="checkbox" id="highlight-studios"> Highlight instead of filter
           </label>
-          <input class="input-field" id="studio-search" placeholder="Search studios…" style="margin-bottom:6px;width:100%;">
+          <input class="input-field" id="studio-search" placeholder="Search studios..." style="margin-bottom:6px;width:100%;" autocomplete="off">
           <select class="filter-select" id="studio-select" multiple></select>
           <div class="select-footer-row">
             <span class="filter-clear" id="studio-clear">Clear selection</span>
@@ -359,56 +363,37 @@
         </div>
       </div>
 
-      <!-- COUNTRY — commented out (data not in offline DB)
-      <div class="section collapsible-section">
-        <div class="section-header" data-section="country">
-          <div class="section-label">🌏 Country of Origin</div>
-          <span class="collapse-icon">▾</span>
-        </div>
-        <div class="section-body" id="section-body-country">
-          <div class="checkbox-grid" id="country-checkboxes"></div>
-          <div class="section-apply-row">
-            <button class="btn btn-sm section-apply-btn">Apply Filters</button>
-          </div>
-        </div>
-      </div>
-      -->
-
-      <!-- CHARACTER / STAFF — commented out (API too slow)
-      <div class="section collapsible-section">...</div>
-      -->
-
     </div><!-- /sidebar-scroll -->
 
     <!-- STATS BAR -->
     <div id="stats-bar">
       <div class="stat-row">
         <span class="stat-label">ANIME NODES</span>
-        <span class="stat-val" id="stat-nodes">—</span>
+        <span class="stat-val" id="stat-nodes">&#8212;</span>
       </div>
       <div class="stat-row">
         <span class="stat-label">META NODES</span>
-        <span class="stat-val" id="stat-meta">—</span>
+        <span class="stat-val" id="stat-meta">&#8212;</span>
       </div>
       <div class="stat-row">
         <span class="stat-label">ANIME CLUSTERS</span>
-        <span class="stat-val" id="stat-clusters">—</span>
+        <span class="stat-val" id="stat-clusters">&#8212;</span>
       </div>
-      <div class="stat-row">
-        <span class="stat-label">LARGEST CLUSTER</span>
-        <span class="stat-val" id="stat-largest-cluster">—</span>
+      <div class="stat-row" title="Click to highlight largest cluster">
+        <span class="stat-label">LARGEST CLUSTER &#128270;</span>
+        <span class="stat-val stat-clickable" id="stat-largest-cluster">&#8212;</span>
       </div>
-      <div class="stat-row">
-        <span class="stat-label">LONGEST CHAIN</span>
-        <span class="stat-val" id="stat-longest-chain">—</span>
+      <div class="stat-row" title="Click to highlight longest chain">
+        <span class="stat-label">LONGEST CHAIN &#128270;</span>
+        <span class="stat-val stat-clickable" id="stat-longest-chain">&#8212;</span>
       </div>
       <div class="stat-row">
         <span class="stat-label">EDGES</span>
-        <span class="stat-val" id="stat-edges">—</span>
+        <span class="stat-val" id="stat-edges">&#8212;</span>
       </div>
       <div class="stat-row">
         <span class="stat-label">TOTAL DB</span>
-        <span class="stat-val" id="stat-total">—</span>
+        <span class="stat-val" id="stat-total">&#8212;</span>
       </div>
       <div class="stat-row" style="flex-direction:column;align-items:flex-start;gap:4px;margin-top:4px;">
         <span class="stat-label">MIN CLUSTER SIZE (stat only)</span>
@@ -418,11 +403,11 @@
         </div>
       </div>
       <div class="stats-actions">
-        <button class="action-btn danger-btn" id="clear-all-btn">↺ Clear All</button>
-        <button class="action-btn share-btn-el" id="share-btn">⎘ Share</button>
+        <button class="action-btn danger-btn" id="clear-all-btn">&#8634; Clear All</button>
+        <button class="action-btn share-btn-el" id="share-btn">&#9112; Share</button>
       </div>
       <div class="stats-actions" style="margin-top:4px;">
-        <button class="action-btn download-btn" id="download-btn">⬇ Download List</button>
+        <button class="action-btn download-btn" id="download-btn">&#11015; Download List</button>
       </div>
     </div>
   </aside>
@@ -433,10 +418,10 @@
       <div class="top-pill" id="mode-pill">Mode: <span>All Anime</span></div>
     </div>
     <div id="graph-controls">
-      <button class="ctrl-btn" id="zoom-fit" title="Fit to screen">⊡</button>
+      <button class="ctrl-btn" id="zoom-fit" title="Fit to screen">&#8861;</button>
       <button class="ctrl-btn" id="zoom-in" title="Zoom in">+</button>
-      <button class="ctrl-btn" id="zoom-out" title="Zoom out">−</button>
-      <button class="ctrl-btn" id="toggle-links" title="Toggle links">⋮</button>
+      <button class="ctrl-btn" id="zoom-out" title="Zoom out">&#8722;</button>
+      <button class="ctrl-btn" id="toggle-links" title="Toggle links">&#8942;</button>
     </div>
     <div id="graph-canvas"></div>
     <div id="legend">
@@ -446,7 +431,12 @@
     <div id="tooltip"></div>
   </div>
 
+  <!-- MOBILE OVERLAY (closes sidebar on tap outside) -->
+  <div id="sidebar-overlay"></div>
+
 </div><!-- /app -->
+
+<div id="share-toast"></div>
 
 <script src="https://unpkg.com/force-graph"></script>
 <script src="js/anilist.js"></script>

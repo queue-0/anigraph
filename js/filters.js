@@ -108,11 +108,11 @@ function yearBandLabel(year) {
 }
 
 // ── GRADIENT (for score, duration, user score, score delta) ──────────────────
-/** Map 0–1 to blue(0)→green→yellow→red(1) */
+/** Map 0–1 to red(0)→yellow→green(1) */
 function gradientColor(t) {
   t = Math.max(0, Math.min(1, t));
-  const hue = (1 - t) * 240;
-  return `hsl(${hue.toFixed(0)},80%,55%)`;
+  const hue = t * 120;  // 0=red, 60=yellow, 120=green
+  return `hsl(${hue.toFixed(0)},80%,50%)`;
 }
 function gradientBar(label, lo, mid, hi) {
   // Returns an SVG gradient bar for the legend
@@ -214,7 +214,7 @@ function getNodeColor(node, colorBy, nodeById) {
 }
 
 // ── NODE SIZE ─────────────────────────────────────────────────────────────────
-function getNodeSize(node, nodeSizeBy, edgeCounts) {
+function getNodeSize(node, nodeSizeBy, edgeCounts, totalVisibleEdges) {
   // Virtual meta nodes: medium-fixed size regardless of sizing mode
   if (node._virtualMeta) return 3.0;
 
@@ -222,32 +222,35 @@ function getNodeSize(node, nodeSizeBy, edgeCounts) {
 
   if (nodeSizeBy === 'default') {
     if (!isAnime) {
-      // meta nodes always larger than default anime
-      if (node.type === 'studio') return 4.0;
-      if (node.type === 'genre')  return 3.5;
-      if (node.type === 'tag')    return 3.0;
-      return 3.0;
+      if (node.type === 'studio') return 5.0;
+      if (node.type === 'genre')  return 4.5;
+      if (node.type === 'tag')    return 4.0;
+      return 4.0;
     }
-    return 1.5;  // uniform anime
+    return 2.0;  // uniform anime
   }
 
   // For non-default sizing: apply same calc to both anime and meta
   if (nodeSizeBy === 'edges') {
-    const cnt = edgeCounts?.get(node.node_id) || 0;
-    return Math.max(0.8, Math.log2(cnt + 2) * 1.6);
+    const cnt  = edgeCounts?.get(node.node_id) || 0;
+    const total = totalVisibleEdges || 1;
+    // percentage of all visible edges this node participates in (0–1)
+    const pct  = cnt / total;
+    // scale: 1 at 0%, up to 20 at 100% — logarithmic for smooth spread
+    return Math.max(1.0, Math.pow(pct * 100 + 1, 0.7) * 3.5);
   }
   if (nodeSizeBy === 'score') {
     const s = isAnime ? node.score : null;
-    if (!s) return 0.8;
-    return Math.max(0.5, (s / 10) * 5);
+    if (!s) return 1.0;
+    return Math.max(0.8, (s / 10) * 12);
   }
   if (nodeSizeBy === 'user_score') {
-    if (!isAnime) return 0.8;
+    if (!isAnime) return 1.0;
     const us = getUserScoreForAnime ? getUserScoreForAnime(node.al_id) : null;
-    if (us == null) return 0.8;
-    return Math.max(0.5, (us / 10) * 5);
+    if (us == null) return 1.0;
+    return Math.max(0.8, (us / 10) * 12);
   }
-  return 1.5;
+  return 2.0;
 }
 
 // ── ANIME FILTER TEST ─────────────────────────────────────────────────────────
@@ -295,12 +298,22 @@ function animeFilterResult(a, filters, nodeById) {
   // }
 
   if (filters.selGenres.length > 0) {
-    const genreNames = (a.genre_ids || []).map(id => nodeById.get(id)?.name).filter(Boolean);
+    // genre_ids may come from 'genre' nodes or 'tag' nodes whose name is in GENRE_TAGS
+    const genreNames = [
+      ...(a.genre_ids || []).map(id => nodeById.get(id)?.name),
+      ...(a.tag_ids   || []).map(id => {
+        const n = nodeById.get(id);
+        return (n && GENRE_TAGS.has(n.name)) ? n.name : null;
+      }),
+    ].filter(Boolean);
     if (!check(filters.selGenres.some(g => genreNames.includes(g)), hl.genres)) return 'fail';
   }
 
   if (filters.selTags.length > 0) {
-    const tagNames = (a.tag_ids || []).map(id => nodeById.get(id)?.name).filter(Boolean);
+    // Only non-genre tags
+    const tagNames = (a.tag_ids || [])
+      .map(id => nodeById.get(id)?.name)
+      .filter(name => name && !GENRE_TAGS.has(name));
     if (!check(filters.selTags.some(t => tagNames.includes(t)), hl.tags)) return 'fail';
   }
 
@@ -329,10 +342,8 @@ function buildGraphData(rawGraph, filters, nodeById) {
   const highlightedAnime = [];
 
   for (const a of animeNodes) {
-    // Mode gate: user mode → only show list anime; list loaded → respect active IDs
+    // Mode gate: only filter by user list when mode is explicitly 'user'
     if (modeIsUser) {
-      if (!activeUserIds.has(a.al_id)) continue;
-    } else if (activeUserIds !== null) {
       if (!activeUserIds.has(a.al_id)) continue;
     }
 
@@ -459,13 +470,14 @@ function buildGraphData(rawGraph, filters, nodeById) {
     edgeCounts.set(e.s, (edgeCounts.get(e.s) || 0) + 1);
     edgeCounts.set(e.t, (edgeCounts.get(e.t) || 0) + 1);
   }
+  const totalVisibleEdges = filteredEdges.length || 1;
 
   // ── 5. Assign colors & sizes to real nodes ────────────────────────────────
   const allRealNodes = [...finalAnime, ...finalHighlight, ...visibleMeta];
   for (const n of allRealNodes) {
     n._color  = getNodeColor(n, colorBy, nodeById);
     n._dimmed = highlightIds.has(n.node_id);
-    n._size   = getNodeSize(n, filters.nodeSizeBy, edgeCounts);
+    n._size   = getNodeSize(n, filters.nodeSizeBy, edgeCounts, totalVisibleEdges);
   }
 
   // ── 6. Build force-graph node/link arrays ─────────────────────────────────
@@ -496,7 +508,7 @@ function buildGraphData(rawGraph, filters, nodeById) {
 // ── CLUSTER HELPERS ───────────────────────────────────────────────────────────
 function calculateAnimeClusters(nodes, links) {
   const animeIds = new Set(nodes.filter(n => n.data?.type === 'anime').map(n => n.id));
-  if (animeIds.size === 0) return { count: 0, largest: 0 };
+  if (animeIds.size === 0) return { count: 0, largest: 0, largestClusterIds: new Set() };
 
   const adj = new Map();
   animeIds.forEach(id => adj.set(id, []));
@@ -512,22 +524,26 @@ function calculateAnimeClusters(nodes, links) {
 
   const visited = new Set();
   let count = 0, largest = 0;
+  let largestClusterIds = new Set();
   animeIds.forEach(id => {
     if (visited.has(id)) return;
     count++;
-    let size = 0;
+    const clusterIds = new Set();
     const stack = [id];
     visited.add(id);
     while (stack.length) {
       const cur = stack.pop();
-      size++;
+      clusterIds.add(cur);
       for (const nb of (adj.get(cur) || [])) {
         if (!visited.has(nb)) { visited.add(nb); stack.push(nb); }
       }
     }
-    if (size > largest) largest = size;
+    if (clusterIds.size > largest) {
+      largest = clusterIds.size;
+      largestClusterIds = clusterIds;
+    }
   });
-  return { count, largest };
+  return { count, largest, largestClusterIds };
 }
 
 /** Clusters of at least minSize — for stat display only, does NOT filter data */
@@ -535,7 +551,6 @@ function countClustersOfMinSize(nodes, links, minSize) {
   const { count, largest } = calculateAnimeClusters(nodes, links);
   if (minSize <= 1) return count;
 
-  // Re-run with size filter for the count stat
   const animeIds = new Set(nodes.filter(n => n.data?.type === 'anime').map(n => n.id));
   const adj = new Map();
   animeIds.forEach(id => adj.set(id, []));
@@ -567,10 +582,10 @@ function countClustersOfMinSize(nodes, links, minSize) {
   return filtered;
 }
 
-/** BFS longest chain — sampled for performance */
+/** BFS longest chain — returns {length, ids} */
 function calculateLongestChain(nodes, links) {
   const animeIds = new Set(nodes.filter(n => n.data?.type === 'anime').map(n => n.id));
-  if (animeIds.size === 0) return 0;
+  if (animeIds.size === 0) return { length: 0, ids: new Set() };
 
   const adj = new Map();
   animeIds.forEach(id => adj.set(id, []));
@@ -585,15 +600,19 @@ function calculateLongestChain(nodes, links) {
   });
 
   const ids    = [...animeIds];
-  const sample = ids.length > 150
-    ? ids.filter((_, i) => i % Math.ceil(ids.length / 150) === 0)
+  const sample = ids.length > 200
+    ? ids.filter((_, i) => i % Math.ceil(ids.length / 200) === 0)
     : ids;
 
   let longest = 0;
+  let longestEndNode = ids[0];
+
+  // BFS from sample nodes to find a good endpoint
   for (const start of sample) {
     const dist  = new Map([[start, 0]]);
     const queue = [start];
     let maxDist = 0;
+    let maxNode = start;
     let qi = 0;
     while (qi < queue.length) {
       const cur = queue[qi++];
@@ -601,14 +620,39 @@ function calculateLongestChain(nodes, links) {
       for (const nb of (adj.get(cur) || [])) {
         if (!dist.has(nb)) {
           dist.set(nb, d + 1);
-          if (d + 1 > maxDist) maxDist = d + 1;
+          if (d + 1 > maxDist) { maxDist = d + 1; maxNode = nb; }
           queue.push(nb);
         }
       }
     }
-    if (maxDist > longest) longest = maxDist;
+    if (maxDist > longest) { longest = maxDist; longestEndNode = maxNode; }
   }
-  return longest;
+
+  // Now trace path back from longestEndNode using BFS from it
+  const chainIds = new Set();
+  if (longest > 0) {
+    const dist2  = new Map([[longestEndNode, 0]]);
+    const queue2 = [longestEndNode];
+    const parent = new Map([[longestEndNode, null]]);
+    let qi = 0, farthest = longestEndNode, fDist = 0;
+    while (qi < queue2.length) {
+      const cur = queue2[qi++];
+      const d   = dist2.get(cur);
+      for (const nb of (adj.get(cur) || [])) {
+        if (!dist2.has(nb)) {
+          dist2.set(nb, d + 1);
+          parent.set(nb, cur);
+          if (d + 1 > fDist) { fDist = d + 1; farthest = nb; }
+          queue2.push(nb);
+        }
+      }
+    }
+    // Trace path
+    let cur = farthest;
+    while (cur !== null) { chainIds.add(cur); cur = parent.get(cur) ?? null; }
+  }
+
+  return { length: longest, ids: chainIds };
 }
 
 // ── LEGEND BUILDER ────────────────────────────────────────────────────────────
@@ -638,7 +682,7 @@ function buildLegend(filteredAnime, colorBy, visibleNodeTypes, visibleMetaForLeg
     const div = document.createElement('div');
     div.className = 'legend-gradient';
     div.innerHTML = `
-      <div class="legend-grad-bar"></div>
+      <div class="legend-grad-bar" style="background:linear-gradient(90deg,hsl(0,80%,50%),hsl(60,80%,50%),hsl(120,80%,50%))"></div>
       <div class="legend-grad-labels"><span>${loLabel}</span><span>${hiLabel}</span></div>`;
     container.appendChild(div);
   }
@@ -738,15 +782,15 @@ function totalMinutes(anime) {
 }
 
 // ── EXPORTS ───────────────────────────────────────────────────────────────────
-window.META_NODE_COLORS       = META_NODE_COLORS;
-window.ANIME_TYPE_COLORS      = ANIME_TYPE_COLORS;
-window.SEASON_COLORS          = SEASON_COLORS;
-window.RELEASE_STATUS_COLORS  = RELEASE_STATUS_COLORS;
-window.RELEASE_STATUS_LABELS  = RELEASE_STATUS_LABELS;
-window.YEAR_BANDS             = YEAR_BANDS;
-window.gradientColor          = gradientColor;
-window.totalMinutes           = totalMinutes;
-window.GENRE_TAGS             = GENRE_TAGS;
-window.countClustersOfMinSize = countClustersOfMinSize;
-// window.COUNTRY_COLORS = COUNTRY_COLORS;   // commented out
-// window.COUNTRY_LABELS = COUNTRY_LABELS;   // commented out
+window.META_NODE_COLORS        = META_NODE_COLORS;
+window.ANIME_TYPE_COLORS       = ANIME_TYPE_COLORS;
+window.SEASON_COLORS           = SEASON_COLORS;
+window.RELEASE_STATUS_COLORS   = RELEASE_STATUS_COLORS;
+window.RELEASE_STATUS_LABELS   = RELEASE_STATUS_LABELS;
+window.YEAR_BANDS              = YEAR_BANDS;
+window.gradientColor           = gradientColor;
+window.totalMinutes            = totalMinutes;
+window.GENRE_TAGS              = GENRE_TAGS;
+window.countClustersOfMinSize  = countClustersOfMinSize;
+window.calculateAnimeClusters  = calculateAnimeClusters;
+window.calculateLongestChain   = calculateLongestChain;

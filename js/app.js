@@ -106,7 +106,13 @@ function populateFilterLists() {
     switch (n.type) {
       case 'studio': studios.push(n.name); break;
       case 'genre':  genres.push(n.name);  break;
-      case 'tag':    tags.push(n.name);    break;
+      case 'tag': {
+        // If this tag is a genre, put it in genres; otherwise in tags
+        const genreTags = window.GENRE_TAGS || new Set();
+        if (genreTags.has(n.name)) genres.push(n.name);
+        else tags.push(n.name);
+        break;
+      }
     }
   });
 
@@ -122,13 +128,6 @@ function populateFilterLists() {
   wireClear('studio-clear', 'studio-select');
   wireClear('tag-clear',    'tag-select');
   wireClear('genre-clear',  'genre-select');
-
-  // CHARACTER / STAFF — commented out
-  // fillSelect('character-select', characters);
-  // fillSelect('staff-select',     staff);
-
-  // COUNTRY — commented out
-  // populateCountryCheckboxes(countriesFound);
 }
 
 function fillSelect(id, items) {
@@ -386,12 +385,57 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('mode-select')?.addEventListener('change', applyFiltersAndRender);
   document.querySelectorAll('.highlight-toggle input').forEach(i=>i.addEventListener('change', applyFiltersAndRender));
 
+  // ── Sidebar collapse / open ────────────────────────────────────────────────
+  const sidebar       = document.getElementById('sidebar');
+  const collapseBtn   = document.getElementById('sidebar-collapse-btn');
+  const openBtn       = document.getElementById('sidebar-open-btn');
+  const overlay       = document.getElementById('sidebar-overlay');
+  const isMobile      = () => window.innerWidth <= 640;
+
+  function openSidebar() {
+    sidebar.classList.remove('sidebar-collapsed');
+    openBtn.classList.remove('visible');
+    openBtn.style.display = 'none';
+    if (isMobile()) overlay.classList.add('active');
+    if (collapseBtn) collapseBtn.textContent = '\u25C4';
+  }
+
+  function closeSidebar() {
+    sidebar.classList.add('sidebar-collapsed');
+    openBtn.style.display = 'flex';
+    openBtn.classList.add('visible');
+    overlay.classList.remove('active');
+    if (collapseBtn) collapseBtn.textContent = '\u25BA';
+  }
+
+  if (collapseBtn) collapseBtn.addEventListener('click', () => {
+    if (sidebar.classList.contains('sidebar-collapsed')) openSidebar();
+    else closeSidebar();
+  });
+  if (openBtn)    openBtn.addEventListener('click', openSidebar);
+  if (overlay)    overlay.addEventListener('click', closeSidebar);
+
+  // On mobile, start with sidebar closed
+  if (isMobile()) closeSidebar();
+
+  // ── Clickable cluster / chain stats ───────────────────────────────────────
+  document.getElementById('stat-largest-cluster')?.addEventListener('click', () => {
+    if (typeof highlightLargestCluster === 'function') highlightLargestCluster();
+    document.getElementById('stat-largest-cluster')?.classList.toggle('active');
+    document.getElementById('stat-longest-chain')?.classList.remove('active');
+  });
+  document.getElementById('stat-longest-chain')?.addEventListener('click', () => {
+    if (typeof highlightLongestChain === 'function') highlightLongestChain();
+    document.getElementById('stat-longest-chain')?.classList.toggle('active');
+    document.getElementById('stat-largest-cluster')?.classList.remove('active');
+  });
+
   initCollapsibleSections();
 
   loadDatabase().catch(err => {
     const msg = document.getElementById('loader-msg');
     msg.style.cssText = 'color:#c04030;max-width:420px;text-align:center;line-height:1.6;white-space:pre-wrap';
-    msg.textContent = '✗ Failed to load database.\n\n' + err.message +
+    msg.textContent = '\u2717 Failed to load database.\n\n' + err.message +
       '\n\nTry refreshing, or check your network.\nSome ad-blockers may block CDN requests.';
     console.error('DB load failed:', err);
   });

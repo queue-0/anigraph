@@ -363,10 +363,12 @@ body {
 
 /* ── MODE SELECT ── */
 #mode-select {
-  height: auto;
+  height: auto !important;
   padding: 8px 10px;
   font-size: 0.8rem;
   cursor: pointer;
+  appearance: auto;
+  -webkit-appearance: auto;
 }
 
 /* ── STATS BAR ── */
@@ -664,8 +666,102 @@ body {
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
 
-/* ── GRAIN OVERLAY ── */
-body::after {
+/* ── SIDEBAR COLLAPSE ── */
+#sidebar-open-btn {
+  display: none;  /* shown via JS when collapsed */
+  position: fixed;
+  top: 14px;
+  left: 14px;
+  z-index: 50;
+  width: 38px; height: 38px;
+  background: rgba(13,10,7,0.92);
+  border: 1px solid var(--border2);
+  color: var(--gold);
+  font-size: 1.1rem;
+  cursor: pointer;
+  border-radius: 6px;
+  align-items: center;
+  justify-content: center;
+  backdrop-filter: blur(6px);
+  transition: background 0.2s;
+}
+#sidebar-open-btn:hover { background: var(--panel2); }
+
+#sidebar.sidebar-collapsed {
+  width: 0;
+  min-width: 0;
+  overflow: hidden;
+  border-right: none;
+}
+
+/* ── MOBILE OVERLAY ── */
+#sidebar-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.55);
+  z-index: 9;
+}
+#sidebar-overlay.active { display: block; }
+
+/* ── CLICKABLE STAT VALUES ── */
+.stat-clickable {
+  cursor: pointer;
+  text-decoration: underline dotted;
+  transition: color 0.15s;
+}
+.stat-clickable:hover { color: var(--gold2); }
+.stat-clickable.active {
+  color: var(--gold2);
+  text-shadow: 0 0 8px rgba(212,163,68,0.5);
+}
+
+/* ── MOBILE RESPONSIVE ── */
+@media (max-width: 640px) {
+  :root { --sidebar-w: 90vw; }
+
+  #sidebar {
+    position: fixed;
+    top: 0; left: 0;
+    height: 100%;
+    z-index: 20;
+    transform: translateX(0);
+    transition: transform 0.25s ease, width 0.25s ease;
+    box-shadow: 4px 0 24px rgba(0,0,0,0.6);
+  }
+
+  #sidebar.sidebar-collapsed {
+    transform: translateX(-100%);
+    width: var(--sidebar-w);
+    overflow: hidden;
+  }
+
+  #sidebar-open-btn {
+    display: flex !important;
+  }
+
+  #graph-wrap {
+    width: 100vw;
+  }
+
+  #legend {
+    display: none;
+  }
+
+  #tooltip {
+    max-width: 200px;
+    font-size: 0.65rem;
+  }
+
+  .loader-title { font-size: 2rem; }
+  .loader-bar-wrap { width: 80vw; }
+}
+
+@media (min-width: 641px) {
+  /* Desktop: sidebar open btn only visible when sidebar is collapsed via button */
+  #sidebar-open-btn { display: none; }
+  #sidebar-open-btn.visible { display: flex; }
+}
   content: '';
   position: fixed; inset: 0;
   pointer-events: none;
