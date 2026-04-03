@@ -162,11 +162,14 @@ function applyFiltersAndRender() {
   if (!rawGraph) return;
   const filters = getFilters();
   const result  = buildGraphData(rawGraph, filters, window._nodeById);
+
+  // Store for stat-only recalculation (cluster size filter)
+  window._lastGraphNodes = result.nodes;
+  window._lastGraphLinks = result.links;
+
   renderGraph(result);
-  // Pass highlightedAnime so legend always shows full picture
   buildLegend(result.filteredAnime, filters.colorBy, filters.visibleNodeTypes, result.visibleMeta, result.highlightedAnime);
 
-  // Mode pill
   const totalVisible = result.filteredAnime.length + (result.highlightedAnime?.length || 0);
   const modeLabel = filters.mode === 'user' && window.userListLoaded
     ? `My List (${totalVisible.toLocaleString()})`
@@ -177,7 +180,49 @@ function applyFiltersAndRender() {
   window._urlTimer = setTimeout(saveToUrl, 300);
 }
 
-// ── DOWNLOAD ──────────────────────────────────────────────────────────────────
+// ── ANILIST DEBUG DOWNLOAD ────────────────────────────────────────────────────
+function downloadAnilistDebug() {
+  if (!window.userListLoaded) {
+    alert('No AniList list loaded. Please fetch a username first.');
+    return;
+  }
+  const debug = {
+    username: document.getElementById('username-input')?.value?.trim() || '(unknown)',
+    fetched_at: new Date().toISOString(),
+    userScores: window.userScores || {},
+    userList: {},
+    userList_RELATED_count: window.userList?.RELATED?.size || 0,
+  };
+  // Serialize each status set to array of al_ids
+  const STATUSES = ['COMPLETED','PLANNING','CURRENT','PAUSED','DROPPED','REPEATING','RELATED'];
+  STATUSES.forEach(s => {
+    debug.userList[s] = [...(window.userList?.[s] || [])];
+  });
+
+  // Annotate with titles from rawGraph if available
+  const alIdToTitle = new Map();
+  if (window.rawGraph) {
+    window.rawGraph.nodes.forEach(n => {
+      if (n.type === 'anime') alIdToTitle.set(n.al_id, n.title || n.title_en || String(n.al_id));
+    });
+  }
+  debug.annotated = {};
+  STATUSES.forEach(s => {
+    debug.annotated[s] = debug.userList[s].map(id => ({
+      al_id: id,
+      title: alIdToTitle.get(id) || '(not in DB)',
+      score: (window.userScores || {})[id] ?? null,
+    }));
+  });
+
+  const blob = new Blob([JSON.stringify(debug, null, 2)], { type: 'application/json' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href     = url;
+  a.download = `anilist-debug-${debug.username}-${Date.now()}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
 function downloadVisibleAnimeList() {
   if (!rawGraph) return;
   const filters = getFilters();
@@ -381,7 +426,20 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('clear-all-btn')?.addEventListener('click', clearAllFilters);
   document.getElementById('share-btn')?.addEventListener('click', copyShareLink);
   document.getElementById('download-btn')?.addEventListener('click', downloadVisibleAnimeList);
-  document.getElementById('apply-cluster-size')?.addEventListener('click', applyFiltersAndRender);
+  document.getElementById('debug-anilist-btn')?.addEventListener('click', downloadAnilistDebug);
+
+  // Min cluster size: stat-only recalculation, NO full graph re-render
+  document.getElementById('apply-cluster-size')?.addEventListener('click', () => {
+    const minCluster = parseInt(document.getElementById('min-cluster-size')?.value) || 1;
+    if (!window._lastGraphNodes || !window._lastGraphLinks) return;
+    const { count } = window.calculateAnimeClusters(window._lastGraphNodes, window._lastGraphLinks);
+    if (minCluster > 1 && window.countClustersOfMinSize) {
+      const f = window.countClustersOfMinSize(window._lastGraphNodes, window._lastGraphLinks, minCluster);
+      document.getElementById('stat-clusters').textContent = `${f.toLocaleString()} (≥${minCluster})`;
+    } else {
+      document.getElementById('stat-clusters').textContent = count.toLocaleString();
+    }
+  });
   document.getElementById('mode-select')?.addEventListener('change', applyFiltersAndRender);
   document.querySelectorAll('.highlight-toggle input').forEach(i=>i.addEventListener('change', applyFiltersAndRender));
 

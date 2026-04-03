@@ -48,9 +48,9 @@ RELATION_LABELS = {
 
 # Tags in the offline DB that are treated as genres
 GENRE_TAGS = {
-    "Action", "Adventure", "Comedy", "Ecchi", "Fantasy", "Horror",
-    "Mahou Shoujo", "Mecha", "Music", "Mystery", "Psychological",
-    "Romance", "Sci-Fi", "Slice of Life", "Sports", "Supernatural", "Thriller",
+    "action", "adventure", "comedy", "ecchi", "fantasy", "horror",
+    "mahou shoujo", "mecha", "music", "mystery", "psychological",
+    "romance", "sci-fi", "slice of life", "sports", "supernatural", "thriller",
 }
 
 # Offline DB status → release_status field
@@ -209,8 +209,18 @@ def slim_anime(anime):
     release_status = STATUS_MAP_OFFLINE.get(anime.get("status", "UNKNOWN"), "UNKNOWN")
 
     all_tags   = anime.get("tags", [])
-    genre_list = [t for t in all_tags if t in GENRE_TAGS]
-    tag_list   = [t for t in all_tags if t not in GENRE_TAGS][:MAX_TAGS]
+    # Strictly separate: genres are GENRE_TAGS members, tags are everything else
+    # Deduplicate and preserve order
+    seen = set()
+    genre_list, tag_list = [], []
+    for t in all_tags:
+        if t in seen:
+            continue
+        seen.add(t)
+        if t in GENRE_TAGS:
+            genre_list.append(t)
+        elif len(tag_list) < MAX_TAGS:
+            tag_list.append(t)
 
     return {
         "al_id":          al_numeric,

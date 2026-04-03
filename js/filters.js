@@ -1,48 +1,37 @@
 /**
- * filters.js
- * ----------
- * Reads filter state from the sidebar, builds filtered/highlighted graph data.
+ * filters.js — Anigraph
+ * Builds filtered graph data, assigns colors/sizes, builds legend.
  *
- * Key behaviours:
- *  - Genre is extracted from tags client-side (GENRE_TAGS set matches slim-database.py)
- *  - "Color category" meta nodes: type/season/year/release_status/completion each have
- *    virtual meta nodes that appear in the graph and auto-hide when that color is selected
- *  - Highlight mode dims non-matching nodes but keeps them in the legend
- *  - minClusterSize only affects the stat display, NOT the rendered data
- *  - Mode filter (all vs user) correctly gates anime
- *  - release_status comes from node.release_status field (set by offline DB)
- *  - No meta↔meta edges; full deduplication
- *  - Node size: when non-default, meta nodes use same calc as anime
- *  - Performance: aggressive edge caps, fast Set-based lookups
+ * Virtual "color-category" meta nodes (anime_type, season, year, release_status,
+ * completion) are now ACTUALLY CONSTRUCTED here and connected to anime via
+ * synthetic edges. They auto-hide when that color mode is active (redundant).
  */
 
 'use strict';
 
-// ── PERFORMANCE CAPS ─────────────────────────────────────────────────────────
-const TAG_EDGE_MAX_PER_TAG     = 20000;   // reduced for perf
-const GENRE_EDGE_MAX_PER_GENRE = 20000;
-const STUDIO_EDGE_MAX_PER_STUDIO = 20000;
+// ── PERFORMANCE CAPS ──────────────────────────────────────────────────────────
+const TAG_EDGE_MAX_PER_TAG      = 20000;
+const GENRE_EDGE_MAX_PER_GENRE  = 20000;
+const STUDIO_EDGE_MAX_PER_STUDIO= 20000;
 
-// ── GENRE TAGS (must match slim-database.py GENRE_TAGS) ──────────────────────
+// ── GENRE TAGS ────────────────────────────────────────────────────────────────
 const GENRE_TAGS = new Set([
   "Action","Adventure","Comedy","Ecchi","Fantasy","Horror",
   "Mahou Shoujo","Mecha","Music","Mystery","Psychological",
   "Romance","Sci-Fi","Slice of Life","Sports","Supernatural","Thriller",
 ]);
 
-// ── FIXED META NODE COLORS ────────────────────────────────────────────────────
+// ── META NODE COLORS ──────────────────────────────────────────────────────────
 const META_NODE_COLORS = {
-  studio:         '#5eb8ff',  // sky blue
-  genre:          '#ffb347',  // orange
-  tag:            '#5dde9a',  // mint green
-  // character:   '#ff7eb3',  // commented out
-  // staff:       '#c09cff',  // commented out
-  // Color-category virtual meta nodes:
-  anime_type:     '#f0a030',  // amber (matches TV colour approx)
-  season_node:    '#88cc44',  // spring green
-  year_node:      '#66aaff',  // year blue
-  status_node:    '#dd88aa',  // muted rose
-  completion_node:'#40c080',  // list green
+  studio:         '#5eb8ff',
+  genre:          '#ffb347',
+  tag:            '#5dde9a',
+  // Color-category virtual nodes:
+  anime_type:     '#f0a030',
+  season_node:    '#88cc44',
+  year_node:      '#66aaff',
+  status_node:    '#dd88aa',
+  completion_node:'#40c080',
 };
 
 // ── ANIME TYPE COLORS ─────────────────────────────────────────────────────────
@@ -63,7 +52,7 @@ const SEASON_COLORS = {
   WINTER: '#66aaff',
 };
 
-// ── RELEASE STATUS COLORS ─────────────────────────────────────────────────────
+// ── RELEASE STATUS COLORS / LABELS ────────────────────────────────────────────
 const RELEASE_STATUS_COLORS = {
   FINISHED:         '#6688aa',
   RELEASING:        '#44cc66',
@@ -80,10 +69,6 @@ const RELEASE_STATUS_LABELS = {
   HIATUS:           'On Hiatus',
   UNKNOWN:          'Unknown',
 };
-
-// ── COUNTRY (commented out — data not in offline DB) ─────────────────────────
-// const COUNTRY_COLORS = { JP:'#e8483c', CN:'#f0b030', KR:'#4488cc', ... };
-// const COUNTRY_LABELS = { JP:'Japan', CN:'China', KR:'Korea', ... };
 
 // ── YEAR BANDS ────────────────────────────────────────────────────────────────
 const YEAR_BANDS = [
@@ -107,16 +92,11 @@ function yearBandLabel(year) {
   return (YEAR_BANDS.find(b => year <= b.max) || YEAR_BANDS[YEAR_BANDS.length - 1]).label;
 }
 
-// ── GRADIENT (for score, duration, user score, score delta) ──────────────────
-/** Map 0–1 to red(0)→yellow→green(1) */
+// ── GRADIENT: red(low) → green(high) ─────────────────────────────────────────
 function gradientColor(t) {
   t = Math.max(0, Math.min(1, t));
-  const hue = t * 120;  // 0=red, 60=yellow, 120=green
+  const hue = t * 120; // 0=red, 60=yellow, 120=green
   return `hsl(${hue.toFixed(0)},80%,50%)`;
-}
-function gradientBar(label, lo, mid, hi) {
-  // Returns an SVG gradient bar for the legend
-  return { isGradient: true, label, lo, mid, hi };
 }
 function scoreColor(score)      { return score  == null ? '#555' : gradientColor(score / 10); }
 function durationColor(mins)    { return (!mins || mins <= 0) ? '#555' : gradientColor(Math.min(mins, 2000) / 2000); }
@@ -147,16 +127,12 @@ function getFilters() {
   const selGenres  = [...document.getElementById('genre-select').selectedOptions].map(o => o.value);
   const selStudios = [...document.getElementById('studio-select').selectedOptions].map(o => o.value);
 
-  // Country — commented out
-  // const selCountries = new Set([...document.querySelectorAll('#country-checkboxes input:checked')].map(i=>i.value));
-
   const search     = document.getElementById('search-input').value.trim().toLowerCase();
   const colorBy    = document.querySelector('input[name="colorby"]:checked')?.value || 'node_type';
   const nodeSizeBy = document.querySelector('input[name="nodeSizeBy"]:checked')?.value || 'default';
   const minClusterSize = parseInt(document.getElementById('min-cluster-size')?.value) || 1;
   const mode       = document.getElementById('mode-select')?.value || 'all';
 
-  // Highlight flags
   const hl = {
     animetype:     document.getElementById('highlight-animetype')?.checked     || false,
     releasestatus: document.getElementById('highlight-releasestatus')?.checked || false,
@@ -167,7 +143,6 @@ function getFilters() {
     genres:        document.getElementById('highlight-genres')?.checked        || false,
     tags:          document.getElementById('highlight-tags')?.checked          || false,
     studios:       document.getElementById('highlight-studios')?.checked       || false,
-    // country:    document.getElementById('highlight-country')?.checked       || false,
   };
 
   return {
@@ -175,7 +150,6 @@ function getFilters() {
     yearFrom, yearTo, epMin, epMax, lenMin, lenMax,
     scoreMin, scoreMax: scoreMaxV,
     selTags, selGenres, selStudios,
-    // selCountries,
     search, colorBy, nodeSizeBy, minClusterSize, mode,
     highlights: hl,
   };
@@ -183,9 +157,7 @@ function getFilters() {
 
 // ── COLOR RESOLVER ────────────────────────────────────────────────────────────
 function getNodeColor(node, colorBy, nodeById) {
-  // Virtual meta nodes for color categories — always use their category color
   if (node._virtualMeta) return node._color;
-
   if (node.type !== 'anime') return META_NODE_COLORS[node.type] || '#808080';
 
   switch (colorBy) {
@@ -196,7 +168,6 @@ function getNodeColor(node, colorBy, nodeById) {
     case 'score':      return scoreColor(node.score);
     case 'duration':   return durationColor(totalMinutes(node));
     case 'release_status': return RELEASE_STATUS_COLORS[node.release_status || 'UNKNOWN'];
-    // case 'country': return COUNTRY_COLORS[node.country||'??']||'#606060';
     case 'completion': {
       const st = getUserStatusForAnime ? getUserStatusForAnime(node.al_id) : null;
       return (window.COMPLETION_STATUS_COLORS || {})[st] || '#555555';
@@ -214,50 +185,43 @@ function getNodeColor(node, colorBy, nodeById) {
 }
 
 // ── NODE SIZE ─────────────────────────────────────────────────────────────────
-function getNodeSize(node, nodeSizeBy, edgeCounts, totalVisibleEdges) {
-  // Virtual meta nodes: medium-fixed size regardless of sizing mode
-  if (node._virtualMeta) return 3.0;
+function getNodeSize(node, nodeSizeBy, edgeCounts, maxEdgeCount) {
+  if (node._virtualMeta) return 4.5;
 
   const isAnime = node.type === 'anime';
 
   if (nodeSizeBy === 'default') {
     if (!isAnime) {
-      if (node.type === 'studio') return 5.0;
-      if (node.type === 'genre')  return 4.5;
-      if (node.type === 'tag')    return 4.0;
-      return 4.0;
+      if (node.type === 'studio') return 6.0;
+      if (node.type === 'genre')  return 5.5;
+      if (node.type === 'tag')    return 5.0;
+      return 5.0;
     }
-    return 2.0;  // uniform anime
+    return 1.5;
   }
 
-  // For non-default sizing: apply same calc to both anime and meta
   if (nodeSizeBy === 'edges') {
-    const cnt  = edgeCounts?.get(node.node_id) || 0;
-    const total = totalVisibleEdges || 1;
-    // percentage of all visible edges this node participates in (0–1)
-    const pct  = cnt / total;
-    // scale: 1 at 0%, up to 20 at 100% — logarithmic for smooth spread
-    return Math.max(1.0, Math.pow(pct * 100 + 1, 0.7) * 3.5);
+    const cnt = edgeCounts?.get(node.node_id) || 0;
+    const max = maxEdgeCount || 1;
+    // Linear percentage scaled to 1–40 range for dramatic difference
+    const pct = cnt / max;
+    return 1.0 + pct * 45.0;
   }
   if (nodeSizeBy === 'score') {
     const s = isAnime ? node.score : null;
-    if (!s) return 1.0;
-    return Math.max(0.8, (s / 10) * 12);
+    if (s == null || s <= 0) return 0.5;
+    return 0.5 + Math.pow(s / 10, 2) * 25.0;
   }
   if (nodeSizeBy === 'user_score') {
-    if (!isAnime) return 1.0;
+    if (!isAnime) return 0.5;
     const us = getUserScoreForAnime ? getUserScoreForAnime(node.al_id) : null;
-    if (us == null) return 1.0;
-    return Math.max(0.8, (us / 10) * 12);
+    if (us == null) return 0.5;
+    return 0.5 + Math.pow(us / 10, 2) * 25.0;
   }
-  return 2.0;
+  return 1.5;
 }
 
 // ── ANIME FILTER TEST ─────────────────────────────────────────────────────────
-/**
- * Returns: 'pass' | 'highlight' | 'fail'
- * 'highlight' = include but dimmed (highlight mode)
- */
 function animeFilterResult(a, filters, nodeById) {
   const hl = filters.highlights;
   let shouldHighlight = false;
@@ -291,14 +255,8 @@ function animeFilterResult(a, filters, nodeById) {
     if (!check(a.score >= filters.scoreMin && a.score <= filters.scoreMax, hl.score)) return 'fail';
   }
 
-  // Country — commented out
-  // const country = a.country || '??';
-  // if (filters.selCountries.size > 0) {
-  //   if (!check(filters.selCountries.has(country), hl.country)) return 'fail';
-  // }
-
   if (filters.selGenres.length > 0) {
-    // genre_ids may come from 'genre' nodes or 'tag' nodes whose name is in GENRE_TAGS
+    // Check genre_ids (type:'genre' nodes) AND tag_ids whose name is in GENRE_TAGS
     const genreNames = [
       ...(a.genre_ids || []).map(id => nodeById.get(id)?.name),
       ...(a.tag_ids   || []).map(id => {
@@ -310,7 +268,6 @@ function animeFilterResult(a, filters, nodeById) {
   }
 
   if (filters.selTags.length > 0) {
-    // Only non-genre tags
     const tagNames = (a.tag_ids || [])
       .map(id => nodeById.get(id)?.name)
       .filter(name => name && !GENRE_TAGS.has(name));
@@ -332,20 +289,27 @@ function animeFilterResult(a, filters, nodeById) {
 }
 
 // ── BUILD GRAPH DATA ──────────────────────────────────────────────────────────
+/**
+ * Returns { nodes, links, filteredAnime, highlightedAnime, visibleMeta }
+ *
+ * Virtual "color-category" meta nodes are created here for:
+ *   anime_type  → shown when visibleNodeTypes has 'anime_type'  AND colorBy !== 'type'
+ *   season_node → shown when visibleNodeTypes has 'season_node' AND colorBy !== 'season'
+ *   year_node   → shown when visibleNodeTypes has 'year_node'   AND colorBy !== 'year'
+ *   status_node → shown when visibleNodeTypes has 'status_node' AND colorBy !== 'release_status'
+ *   completion_node → shown when 'completion_node' checked AND colorBy !== 'completion'
+ */
 function buildGraphData(rawGraph, filters, nodeById) {
   const activeUserIds = getActiveUserIds ? getActiveUserIds() : null;
   const modeIsUser    = filters.mode === 'user' && activeUserIds !== null;
 
   // ── 1. Filter anime ───────────────────────────────────────────────────────
-  const animeNodes      = rawGraph.nodes.filter(n => n.type === 'anime');
-  const filteredAnime   = [];
+  const animeNodes       = rawGraph.nodes.filter(n => n.type === 'anime');
+  const filteredAnime    = [];
   const highlightedAnime = [];
 
   for (const a of animeNodes) {
-    // Mode gate: only filter by user list when mode is explicitly 'user'
-    if (modeIsUser) {
-      if (!activeUserIds.has(a.al_id)) continue;
-    }
+    if (modeIsUser && !activeUserIds.has(a.al_id)) continue;
 
     const result = animeFilterResult(a, filters, nodeById);
     if (result === 'fail') continue;
@@ -353,95 +317,160 @@ function buildGraphData(rawGraph, filters, nodeById) {
     else filteredAnime.push(a);
   }
 
-  const finalAnime     = filteredAnime;
-  const finalHighlight = highlightedAnime;
-  const finalAllAnime  = [...finalAnime, ...finalHighlight];
-  const finalAnimeIds  = new Set(finalAllAnime.map(n => n.node_id));
-  const highlightIds   = new Set(finalHighlight.map(n => n.node_id));
+  const finalAnime    = filteredAnime;
+  const finalHighlight= highlightedAnime;
+  const finalAllAnime = [...finalAnime, ...finalHighlight];
+  const finalAnimeIds = new Set(finalAllAnime.map(n => n.node_id));
+  const highlightIds  = new Set(finalHighlight.map(n => n.node_id));
 
-  // ── 2. Meta node visibility ───────────────────────────────────────────────
-  const explicitStudios = new Set(filters.selStudios);
-  const explicitTags    = new Set(filters.selTags);
-  const explicitGenres  = new Set(filters.selGenres);
+  const colorBy = filters.colorBy;
 
-  // Which standard meta types are visible?
+  // ── 2. Standard meta node visibility (studio/genre/tag) ───────────────────
   const showStudio = filters.visibleNodeTypes.has('studio');
   const showGenre  = filters.visibleNodeTypes.has('genre');
   const showTag    = filters.visibleNodeTypes.has('tag');
 
-  // Color-category meta types: auto-hide when their color is active
-  // These are toggled in the node-type-visibility section by synthetic values
-  const colorBy = filters.colorBy;
-  const showTypeNodes       = filters.visibleNodeTypes.has('anime_type')  && colorBy !== 'type';
-  const showSeasonNodes     = filters.visibleNodeTypes.has('season_node') && colorBy !== 'season';
-  const showYearNodes       = filters.visibleNodeTypes.has('year_node')   && colorBy !== 'year';
-  const showStatusNodes     = filters.visibleNodeTypes.has('status_node') && colorBy !== 'release_status';
-  const showCompletionNodes = filters.visibleNodeTypes.has('completion_node') && colorBy !== 'completion';
+  const explicitStudios = new Set(filters.selStudios);
+  const explicitTags    = new Set(filters.selTags);
+  const explicitGenres  = new Set(filters.selGenres);
 
-  // Edge counters for rate limiting
   const tagEdgeCount    = new Map();
   const genreEdgeCount  = new Map();
   const studioEdgeCount = new Map();
   const visibleMetaIds  = new Set();
 
-  // Single pass over edges to find visible meta IDs
   for (const e of rawGraph.edges) {
-    if (e.k === 'related') continue;  // skip anime↔anime in this pass
+    if (e.k === 'related') continue;
 
     const sIsAnime = finalAnimeIds.has(e.s);
     const tIsAnime = finalAnimeIds.has(e.t);
-    if (sIsAnime === tIsAnime) continue;  // both meta or both anime (meta↔meta skipped)
+    if (sIsAnime === tIsAnime) continue;
 
     const metaId   = sIsAnime ? e.t : e.s;
     const metaNode = nodeById.get(metaId);
     if (!metaNode || metaNode.type === 'anime') continue;
 
     const mt = metaNode.type;
-
     if (mt === 'studio') {
       if (!showStudio) continue;
       if (explicitStudios.size > 0 && !explicitStudios.has(metaNode.name)) continue;
     } else if (mt === 'genre') {
       if (!showGenre) continue;
       if (explicitGenres.size > 0 && !explicitGenres.has(metaNode.name)) continue;
+      // Also treat tag nodes with genre names as genre nodes
     } else if (mt === 'tag') {
-      if (!showTag) continue;
-      if (explicitTags.size > 0 && !explicitTags.has(metaNode.name)) continue;
+      // If this tag is a genre name, treat it as genre visibility
+      if (GENRE_TAGS.has(metaNode.name)) {
+        if (!showGenre) continue;
+        if (explicitGenres.size > 0 && !explicitGenres.has(metaNode.name)) continue;
+      } else {
+        if (!showTag) continue;
+        if (explicitTags.size > 0 && !explicitTags.has(metaNode.name)) continue;
+      }
     } else {
-      continue;  // character/staff — not currently enabled
+      continue;
     }
 
     visibleMetaIds.add(metaId);
   }
 
-  const visibleMeta   = rawGraph.nodes.filter(n => visibleMetaIds.has(n.node_id));
-  const allVisibleIds = new Set([...finalAnimeIds, ...visibleMetaIds]);
+  const visibleMeta = rawGraph.nodes.filter(n => visibleMetaIds.has(n.node_id));
 
-  // ── 3. Build edge set ─────────────────────────────────────────────────────
+  // ── 3. Virtual color-category meta nodes ─────────────────────────────────
+  // These are synthetic nodes (not from rawGraph) connecting anime to
+  // their type/season/year/status/completion category.
+  const showTypeNodes       = filters.visibleNodeTypes.has('anime_type')     && colorBy !== 'type';
+  const showSeasonNodes     = filters.visibleNodeTypes.has('season_node')    && colorBy !== 'season';
+  const showYearNodes       = filters.visibleNodeTypes.has('year_node')      && colorBy !== 'year';
+  const showStatusNodes     = filters.visibleNodeTypes.has('status_node')    && colorBy !== 'release_status';
+  const showCompletionNodes = filters.visibleNodeTypes.has('completion_node') && colorBy !== 'completion';
+
+  // Virtual node registry: key → syntheticId
+  const virtualNodeMap = new Map();
+  const virtualNodes  = [];
+  const virtualLinks  = [];
+  let   virtualIdSeed = -1; // negative IDs to avoid collision with real node_ids
+
+  function getOrCreateVirtual(key, label, color, metaType) {
+    if (!virtualNodeMap.has(key)) {
+      const vid = virtualIdSeed--;
+      const vnode = {
+        node_id:      vid,
+        type:         metaType,
+        name:         label,
+        _virtualMeta: true,
+        _color:       color,
+      };
+      virtualNodeMap.set(key, vid);
+      virtualNodes.push(vnode);
+    }
+    return virtualNodeMap.get(key);
+  }
+
+  // Build virtual nodes + links for each anime
+  for (const a of finalAllAnime) {
+    if (showTypeNodes && a.anime_type) {
+      const col = ANIME_TYPE_COLORS[a.anime_type] || '#606060';
+      const vid = getOrCreateVirtual(`type_${a.anime_type}`, a.anime_type, col, 'anime_type');
+      virtualLinks.push({ source: a.node_id, target: vid, kind: 'anime_type', relationLabel: null });
+    }
+    if (showSeasonNodes && a.season) {
+      const col = SEASON_COLORS[a.season] || '#888888';
+      const vid = getOrCreateVirtual(`season_${a.season}`, a.season, col, 'season_node');
+      virtualLinks.push({ source: a.node_id, target: vid, kind: 'season_node', relationLabel: null });
+    }
+    if (showYearNodes && a.year) {
+      const band  = YEAR_BANDS.find(b => a.year <= b.max) || YEAR_BANDS[YEAR_BANDS.length - 1];
+      const col   = `hsl(${band.hue},70%,55%)`;
+      const vid   = getOrCreateVirtual(`year_${band.label}`, band.label, col, 'year_node');
+      virtualLinks.push({ source: a.node_id, target: vid, kind: 'year_node', relationLabel: null });
+    }
+    if (showStatusNodes) {
+      const rs  = a.release_status || 'UNKNOWN';
+      const col = RELEASE_STATUS_COLORS[rs] || '#555555';
+      const vid = getOrCreateVirtual(`status_${rs}`, RELEASE_STATUS_LABELS[rs] || rs, col, 'status_node');
+      virtualLinks.push({ source: a.node_id, target: vid, kind: 'status_node', relationLabel: null });
+    }
+    if (showCompletionNodes && window.userListLoaded) {
+      const st  = getUserStatusForAnime ? getUserStatusForAnime(a.al_id) : null;
+      const key = st || 'NOT_LISTED';
+      const col = (window.COMPLETION_STATUS_COLORS || {})[st] || '#555555';
+      const lbl = (window.COMPLETION_STATUS_LABELS || {})[st] || 'Not in List';
+      const vid = getOrCreateVirtual(`completion_${key}`, lbl, col, 'completion_node');
+      virtualLinks.push({ source: a.node_id, target: vid, kind: 'completion_node', relationLabel: null });
+    }
+  }
+
+  // ── 4. Build edge set from rawGraph ───────────────────────────────────────
+  const allVisibleIds = new Set([...finalAnimeIds, ...visibleMetaIds]);
   const edgeDedup     = new Set();
   const filteredEdges = [];
 
   for (const e of rawGraph.edges) {
     if (!allVisibleIds.has(e.s) || !allVisibleIds.has(e.t)) continue;
 
-    // No meta↔meta
     const sNode = nodeById.get(e.s);
     const tNode = nodeById.get(e.t);
     if (!sNode || !tNode) continue;
     if (sNode.type !== 'anime' && tNode.type !== 'anime') continue;
 
-    // Visibility gate by kind
     if (e.k === 'studio'    && !showStudio) continue;
     if (e.k === 'genre'     && !showGenre)  continue;
-    if (e.k === 'tag'       && !showTag)    continue;
-    if (e.k === 'character' || e.k === 'staff') continue;  // disabled
+    if (e.k === 'tag') {
+      // tag edges for genre-tagged nodes follow genre visibility
+      const metaNode = sNode.type !== 'anime' ? sNode : tNode;
+      if (GENRE_TAGS.has(metaNode.name)) {
+        if (!showGenre) continue;
+      } else {
+        if (!showTag) continue;
+      }
+    }
+    if (e.k === 'character' || e.k === 'staff') continue;
 
-    // Dedup
     const key = `${Math.min(e.s,e.t)}_${Math.max(e.s,e.t)}_${e.k}`;
     if (edgeDedup.has(key)) continue;
     edgeDedup.add(key);
 
-    // Rate-limit hub edges
     if (e.k === 'tag') {
       const id = sNode.type !== 'anime' ? e.s : e.t;
       const c  = tagEdgeCount.get(id) || 0;
@@ -464,52 +493,68 @@ function buildGraphData(rawGraph, filters, nodeById) {
     filteredEdges.push(e);
   }
 
-  // ── 4. Edge count map for sizing ──────────────────────────────────────────
+  // ── 5. Edge count map for sizing ──────────────────────────────────────────
   const edgeCounts = new Map();
-  for (const e of filteredEdges) {
-    edgeCounts.set(e.s, (edgeCounts.get(e.s) || 0) + 1);
-    edgeCounts.set(e.t, (edgeCounts.get(e.t) || 0) + 1);
+  const allEdges   = [...filteredEdges, ...virtualLinks];
+  for (const e of allEdges) {
+    const s = typeof e.source === 'number' ? e.source : e.s;
+    const t = typeof e.target === 'number' ? e.target : e.t;
+    edgeCounts.set(s, (edgeCounts.get(s) || 0) + 1);
+    edgeCounts.set(t, (edgeCounts.get(t) || 0) + 1);
   }
-  const totalVisibleEdges = filteredEdges.length || 1;
+  const maxEdgeCount = Math.max(1, ...edgeCounts.values());
 
-  // ── 5. Assign colors & sizes to real nodes ────────────────────────────────
+  // ── 6. Assign colors & sizes ──────────────────────────────────────────────
   const allRealNodes = [...finalAnime, ...finalHighlight, ...visibleMeta];
   for (const n of allRealNodes) {
     n._color  = getNodeColor(n, colorBy, nodeById);
     n._dimmed = highlightIds.has(n.node_id);
-    n._size   = getNodeSize(n, filters.nodeSizeBy, edgeCounts, totalVisibleEdges);
+    n._size   = getNodeSize(n, filters.nodeSizeBy, edgeCounts, maxEdgeCount);
+  }
+  for (const vn of virtualNodes) {
+    vn._dimmed = false;
+    vn._size   = getNodeSize(vn, filters.nodeSizeBy, edgeCounts, maxEdgeCount);
   }
 
-  // ── 6. Build force-graph node/link arrays ─────────────────────────────────
-  const nodes = allRealNodes.map(n => ({
-    id:     n.node_id,
-    label:  n.title || n.title_en || n.name || '?',
-    color:  n._color,
-    dimmed: n._dimmed,
-    val:    n._size,
-    data:   n,
-  }));
+  // ── 7. Build force-graph node/link arrays ─────────────────────────────────
+  const nodes = [
+    ...allRealNodes.map(n => ({
+      id:     n.node_id,
+      label:  n.title || n.title_en || n.name || '?',
+      color:  n._color,
+      dimmed: n._dimmed,
+      val:    n._size,
+      data:   n,
+    })),
+    ...virtualNodes.map(vn => ({
+      id:     vn.node_id,
+      label:  vn.name,
+      color:  vn._color,
+      dimmed: false,
+      val:    vn._size,
+      data:   vn,
+    })),
+  ];
 
-  const links = filteredEdges.map(e => ({
+  const rawLinks = filteredEdges.map(e => ({
     source:        e.s,
     target:        e.t,
     kind:          e.k,
     relationLabel: e.rel || null,
   }));
+  const links = [...rawLinks, ...virtualLinks];
 
   return {
     nodes, links,
-    filteredAnime:   finalAnime,
+    filteredAnime:    finalAnime,
     highlightedAnime: finalHighlight,
-    visibleMeta,
+    visibleMeta: [...visibleMeta, ...virtualNodes],
   };
 }
 
 // ── CLUSTER HELPERS ───────────────────────────────────────────────────────────
-function calculateAnimeClusters(nodes, links) {
+function _buildAnimeAdj(nodes, links) {
   const animeIds = new Set(nodes.filter(n => n.data?.type === 'anime').map(n => n.id));
-  if (animeIds.size === 0) return { count: 0, largest: 0, largestClusterIds: new Set() };
-
   const adj = new Map();
   animeIds.forEach(id => adj.set(id, []));
   links.forEach(l => {
@@ -521,10 +566,17 @@ function calculateAnimeClusters(nodes, links) {
       adj.get(tgt).push(src);
     }
   });
+  return { animeIds, adj };
+}
+
+function calculateAnimeClusters(nodes, links) {
+  const { animeIds, adj } = _buildAnimeAdj(nodes, links);
+  if (animeIds.size === 0) return { count: 0, largest: 0, largestClusterIds: new Set() };
 
   const visited = new Set();
   let count = 0, largest = 0;
   let largestClusterIds = new Set();
+
   animeIds.forEach(id => {
     if (visited.has(id)) return;
     count++;
@@ -540,29 +592,16 @@ function calculateAnimeClusters(nodes, links) {
     }
     if (clusterIds.size > largest) {
       largest = clusterIds.size;
-      largestClusterIds = clusterIds;
+      largestClusterIds = new Set(clusterIds); // clone
     }
   });
   return { count, largest, largestClusterIds };
 }
 
-/** Clusters of at least minSize — for stat display only, does NOT filter data */
 function countClustersOfMinSize(nodes, links, minSize) {
-  const { count, largest } = calculateAnimeClusters(nodes, links);
-  if (minSize <= 1) return count;
+  const { animeIds, adj } = _buildAnimeAdj(nodes, links);
+  if (minSize <= 1) return animeIds.size > 0 ? calculateAnimeClusters(nodes, links).count : 0;
 
-  const animeIds = new Set(nodes.filter(n => n.data?.type === 'anime').map(n => n.id));
-  const adj = new Map();
-  animeIds.forEach(id => adj.set(id, []));
-  links.forEach(l => {
-    if (l.kind !== 'related') return;
-    const src = typeof l.source === 'object' ? l.source.id : l.source;
-    const tgt = typeof l.target === 'object' ? l.target.id : l.target;
-    if (animeIds.has(src) && animeIds.has(tgt)) {
-      adj.get(src).push(tgt);
-      adj.get(tgt).push(src);
-    }
-  });
   const visited = new Set();
   let filtered = 0;
   animeIds.forEach(id => {
@@ -582,85 +621,70 @@ function countClustersOfMinSize(nodes, links, minSize) {
   return filtered;
 }
 
-/** BFS longest chain — returns {length, ids} */
+/**
+ * BFS longest chain — double-BFS to find true diameter, returns {length, ids}.
+ * ids is a Set of ForceGraph node IDs along the longest path.
+ */
 function calculateLongestChain(nodes, links) {
-  const animeIds = new Set(nodes.filter(n => n.data?.type === 'anime').map(n => n.id));
+  const { animeIds, adj } = _buildAnimeAdj(nodes, links);
   if (animeIds.size === 0) return { length: 0, ids: new Set() };
 
-  const adj = new Map();
-  animeIds.forEach(id => adj.set(id, []));
-  links.forEach(l => {
-    if (l.kind !== 'related') return;
-    const src = typeof l.source === 'object' ? l.source.id : l.source;
-    const tgt = typeof l.target === 'object' ? l.target.id : l.target;
-    if (animeIds.has(src) && animeIds.has(tgt)) {
-      adj.get(src).push(tgt);
-      adj.get(tgt).push(src);
-    }
-  });
-
-  const ids    = [...animeIds];
-  const sample = ids.length > 200
-    ? ids.filter((_, i) => i % Math.ceil(ids.length / 200) === 0)
-    : ids;
-
-  let longest = 0;
-  let longestEndNode = ids[0];
-
-  // BFS from sample nodes to find a good endpoint
-  for (const start of sample) {
-    const dist  = new Map([[start, 0]]);
+  // Helper: BFS from start, returns {dist Map, farthestNode, maxDist}
+  function bfs(start) {
+    const dist = new Map([[start, 0]]);
+    const prev = new Map([[start, null]]); // parent tracking
     const queue = [start];
-    let maxDist = 0;
-    let maxNode = start;
-    let qi = 0;
+    let qi = 0, farthest = start, maxDist = 0;
     while (qi < queue.length) {
       const cur = queue[qi++];
       const d   = dist.get(cur);
       for (const nb of (adj.get(cur) || [])) {
         if (!dist.has(nb)) {
           dist.set(nb, d + 1);
-          if (d + 1 > maxDist) { maxDist = d + 1; maxNode = nb; }
+          prev.set(nb, cur);
           queue.push(nb);
+          if (d + 1 > maxDist) { maxDist = d + 1; farthest = nb; }
         }
       }
     }
-    if (maxDist > longest) { longest = maxDist; longestEndNode = maxNode; }
+    return { dist, prev, farthest, maxDist };
   }
 
-  // Now trace path back from longestEndNode using BFS from it
+  // Sample to find a good endpoint u
+  const ids = [...animeIds];
+  const sampleStep = Math.max(1, Math.ceil(ids.length / 200));
+  const sample = ids.filter((_, i) => i % sampleStep === 0);
+
+  let bestEnd = ids[0];
+  let bestDist = 0;
+  for (const s of sample) {
+    const { farthest, maxDist } = bfs(s);
+    if (maxDist > bestDist) { bestDist = maxDist; bestEnd = farthest; }
+  }
+
+  // BFS from bestEnd to find the true far end v and trace path
+  const { prev, farthest: v, maxDist: chainLen } = bfs(bestEnd);
+
+  // Trace path from v back to bestEnd
   const chainIds = new Set();
-  if (longest > 0) {
-    const dist2  = new Map([[longestEndNode, 0]]);
-    const queue2 = [longestEndNode];
-    const parent = new Map([[longestEndNode, null]]);
-    let qi = 0, farthest = longestEndNode, fDist = 0;
-    while (qi < queue2.length) {
-      const cur = queue2[qi++];
-      const d   = dist2.get(cur);
-      for (const nb of (adj.get(cur) || [])) {
-        if (!dist2.has(nb)) {
-          dist2.set(nb, d + 1);
-          parent.set(nb, cur);
-          if (d + 1 > fDist) { fDist = d + 1; farthest = nb; }
-          queue2.push(nb);
-        }
-      }
+  if (chainLen > 0) {
+    let cur = v;
+    while (cur !== null && cur !== undefined) {
+      chainIds.add(cur);
+      cur = prev.get(cur);
+      if (cur === undefined) break;
     }
-    // Trace path
-    let cur = farthest;
-    while (cur !== null) { chainIds.add(cur); cur = parent.get(cur) ?? null; }
+  } else {
+    chainIds.add(bestEnd);
   }
 
-  return { length: longest, ids: chainIds };
+  return { length: chainLen, ids: chainIds };
 }
 
 // ── LEGEND BUILDER ────────────────────────────────────────────────────────────
 function buildLegend(filteredAnime, colorBy, visibleNodeTypes, visibleMetaForLegend, highlightedAnime) {
   const container = document.getElementById('legend-items');
   container.innerHTML = '';
-
-  // allAnime includes highlighted — legend always shows full picture
   const allAnime = [...filteredAnime, ...(highlightedAnime || [])];
 
   function addItem(color, label, legendKey, legendVal) {
@@ -668,12 +692,11 @@ function buildLegend(filteredAnime, colorBy, visibleNodeTypes, visibleMetaForLeg
     div.className = 'legend-item';
     if (legendKey) {
       div.dataset.legendKey = legendKey;
-      div.dataset.legendVal = legendVal;
+      div.dataset.legendVal = legendVal || '';
       div.style.cursor = 'pointer';
       div.title = 'Click to highlight';
     }
-    div.innerHTML = `
-      <div class="legend-dot" style="background:${color}"></div>
+    div.innerHTML = `<div class="legend-dot" style="background:${color}"></div>
       <span style="max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${label}</span>`;
     container.appendChild(div);
   }
@@ -689,50 +712,37 @@ function buildLegend(filteredAnime, colorBy, visibleNodeTypes, visibleMetaForLeg
 
   const total = allAnime.length;
 
-  // ── Anime color section ───────────────────────────────────────────────────
   if (colorBy === 'node_type') {
     addItem('#e8a030', `Anime (${total.toLocaleString()})`, 'node_type', 'anime');
-
   } else if (colorBy === 'type') {
     const counts = {};
     allAnime.forEach(a => { counts[a.anime_type] = (counts[a.anime_type] || 0) + 1; });
     Object.entries(ANIME_TYPE_COLORS).forEach(([type, col]) => {
       if (counts[type]) addItem(col, `${type} (${counts[type].toLocaleString()})`, 'anime_type', type);
     });
-
   } else if (colorBy === 'year') {
     const bandCounts = {};
-    allAnime.forEach(a => {
-      const lbl = yearBandLabel(a.year);
-      bandCounts[lbl] = (bandCounts[lbl] || 0) + 1;
-    });
+    allAnime.forEach(a => { const lbl = yearBandLabel(a.year); bandCounts[lbl] = (bandCounts[lbl]||0)+1; });
     YEAR_BANDS.forEach(b => {
-      if (bandCounts[b.label]) {
-        addItem(`hsl(${b.hue},70%,55%)`, `${b.label} (${bandCounts[b.label].toLocaleString()})`, 'year_band', b.label);
-      }
+      if (bandCounts[b.label]) addItem(`hsl(${b.hue},70%,55%)`, `${b.label} (${bandCounts[b.label].toLocaleString()})`, 'year_band', b.label);
     });
-
   } else if (colorBy === 'season') {
     const counts = {};
-    allAnime.forEach(a => { const k = a.season || 'Unknown'; counts[k] = (counts[k]||0)+1; });
+    allAnime.forEach(a => { const k = a.season||'Unknown'; counts[k]=(counts[k]||0)+1; });
     Object.entries(SEASON_COLORS).forEach(([s, col]) => {
       if (counts[s]) addItem(col, `${s} (${counts[s].toLocaleString()})`, 'season', s);
     });
     if (counts['Unknown']) addItem('#666', `Unknown (${counts['Unknown'].toLocaleString()})`, 'season', 'Unknown');
-
   } else if (colorBy === 'release_status') {
     const counts = {};
     allAnime.forEach(a => { const k = a.release_status||'UNKNOWN'; counts[k]=(counts[k]||0)+1; });
     Object.entries(RELEASE_STATUS_COLORS).forEach(([st, col]) => {
       if (counts[st]) addItem(col, `${RELEASE_STATUS_LABELS[st]||st} (${counts[st].toLocaleString()})`, 'release_status', st);
     });
-
   } else if (colorBy === 'score') {
     addGradientBar('0 (low)', '10 (high)');
-
   } else if (colorBy === 'duration') {
     addGradientBar('Short', 'Long (≥2000 min)');
-
   } else if (colorBy === 'completion') {
     const colors = window.COMPLETION_STATUS_COLORS || {};
     const labels = window.COMPLETION_STATUS_LABELS || {};
@@ -740,14 +750,12 @@ function buildLegend(filteredAnime, colorBy, visibleNodeTypes, visibleMetaForLeg
     let notInList = 0;
     allAnime.forEach(a => {
       const st = getUserStatusForAnime ? getUserStatusForAnime(a.al_id) : null;
-      if (st) counts[st] = (counts[st]||0)+1;
-      else notInList++;
+      if (st) counts[st]=(counts[st]||0)+1; else notInList++;
     });
     Object.entries(colors).forEach(([st, col]) => {
       if (counts[st]) addItem(col, `${labels[st]||st} (${counts[st].toLocaleString()})`, 'completion', st);
     });
     if (notInList > 0) addItem('#555', `Not in list (${notInList.toLocaleString()})`);
-
   } else if (colorBy === 'user_score') {
     addGradientBar('0 (low)', '10 (high)');
   } else if (colorBy === 'score_delta') {
@@ -762,17 +770,25 @@ function buildLegend(filteredAnime, colorBy, visibleNodeTypes, visibleMetaForLeg
   // ── Standard meta node types ──────────────────────────────────────────────
   const metaCounts = {};
   if (visibleMetaForLegend) {
-    visibleMetaForLegend.forEach(n => { metaCounts[n.type] = (metaCounts[n.type]||0)+1; });
+    visibleMetaForLegend.forEach(n => { metaCounts[n.type]=(metaCounts[n.type]||0)+1; });
   }
-  [['studio','Studios'],['genre','Genres'],['tag','Tags']].forEach(([type, label]) => {
-    if (visibleNodeTypes.has(type)) {
-      const cnt = metaCounts[type] || 0;
-      addItem(META_NODE_COLORS[type], cnt > 0 ? `${label} (${cnt.toLocaleString()})` : label, 'meta_type', type);
+  [
+    ['studio',          'Studios',        'meta_type', 'studio'],
+    ['genre',           'Genres',         'meta_type', 'genre'],
+    ['tag',             'Tags',           'meta_type', 'tag'],
+    ['anime_type',      'Anime Types',    'meta_type', 'anime_type'],
+    ['season_node',     'Seasons',        'meta_type', 'season_node'],
+    ['year_node',       'Year Bands',     'meta_type', 'year_node'],
+    ['status_node',     'Airing Status',  'meta_type', 'status_node'],
+    ['completion_node', 'List Status',    'meta_type', 'completion_node'],
+  ].forEach(([type, label, lk, lv]) => {
+    const cnt = metaCounts[type] || 0;
+    if (cnt > 0) {
+      addItem(META_NODE_COLORS[type] || '#808080', `${label} (${cnt})`, lk, lv);
+    } else if (['studio','genre','tag'].includes(type) && visibleNodeTypes.has(type)) {
+      addItem(META_NODE_COLORS[type], label, lk, lv);
     }
   });
-
-  // CHARACTER / STAFF — commented out
-  // [['character','Characters'],['staff','Staff']].forEach(...)
 }
 
 // ── HELPERS ───────────────────────────────────────────────────────────────────
