@@ -70,7 +70,7 @@ function initGraph() {
     .enableNodeDrag(false)
     .d3AlphaDecay(0.04)
     .d3VelocityDecay(0.5)
-    .warmupTicks(0)     // we handle warmup manually in renderGraph
+    .warmupTicks(120)     // we handle warmup manually in renderGraph
     .cooldownTicks(0)
     .cooldownTime(0)
     .onEngineStop(() => {
@@ -81,18 +81,12 @@ function initGraph() {
 
   // Tuned charge: strong, distance-limited to avoid pulling distant clusters
   const charge = graphInstance.d3Force('charge');
-  if (charge?.strength) charge.strength(-200).distanceMax(500).theta(0.9);
+  if (charge?.strength) charge.strength(-150).distanceMax(600);
 
-  // Link distance: gives clusters space to breathe
-  graphInstance.d3Force('link')?.distance(l => {
-    // Meta↔anime links get longer distance to push meta to periphery
-    const sn = currentNodeMap.get(typeof l.source === 'object' ? l.source.id : l.source);
-    const tn = currentNodeMap.get(typeof l.target === 'object' ? l.target.id : l.target);
-    const hasMeta = (sn?.data?.type !== 'anime') || (tn?.data?.type !== 'anime');
-    return hasMeta ? 120 : 45;
-  }).strength(0.6);
+  // No link distance force — let charge handle spread
+  graphInstance.d3Force('link')?.distance(40).strength(0.5);
 
-  // No collision — too expensive at scale
+  // No collision — too expensive at 10k+ nodes
   graphInstance.d3Force('collision', null);
 
   // ── Zoom controls ─────────────────────────────────────────────────────────
@@ -109,9 +103,10 @@ function initGraph() {
     const tt = document.getElementById('tooltip');
     if (tt.style.display === 'none') return;
     const vw = window.innerWidth, vh = window.innerHeight;
-    const x = (e.clientX + 14 + 290 > vw) ? e.clientX - 300 : e.clientX + 14;
-    const y = Math.min(e.clientY - 10, vh - 270);
-    tt.style.left = x + 'px'; tt.style.top = y + 'px';
+    const x = (e.clientX + 14 + 280 > vw) ? e.clientX - 290 : e.clientX + 14;
+    const y = Math.min(e.clientY - 10, vh - 260);
+    tt.style.left = x + 'px';
+    tt.style.top  = y + 'px';
   });
 
   // ── Background click ───────────────────────────────────────────────────────
@@ -137,96 +132,6 @@ function initGraph() {
   });
 }
 
-// ── PRE-POSITION nodes to break circular formations ───────────────────────────
-function prePositionNodes(nodes, links) {
-  const W = graphInstance.width()  || window.innerWidth  * 0.75;
-  const H = graphInstance.height() || window.innerHeight;
-
-  // Build adjacency for connected-component detection
-  const adjMap = new Map();
-  nodes.forEach(n => adjMap.set(n.id, []));
-  links.forEach(l => {
-    const s = typeof l.source === 'object' ? l.source.id : l.source;
-    const t = typeof l.target === 'object' ? l.target.id : l.target;
-    if (adjMap.has(s)) adjMap.get(s).push(t);
-    if (adjMap.has(t)) adjMap.get(t).push(s);
-  });
-
-  // Find connected components
-  const visited = new Set();
-  const components = []; // array of node-id arrays
-  for (const n of nodes) {
-    if (visited.has(n.id)) continue;
-    const comp = [];
-    const stack = [n.id];
-    visited.add(n.id);
-    while (stack.length) {
-      const cur = stack.pop();
-      comp.push(cur);
-      for (const nb of (adjMap.get(cur) || [])) {
-        if (!visited.has(nb)) { visited.add(nb); stack.push(nb); }
-      }
-    }
-    components.push(comp);
-  }
-  // Sort largest first
-  components.sort((a, b) => b.length - a.length);
-
-  // Pack components using a simple grid arrangement with spacing
-  const nodeById = new Map(nodes.map(n => [n.id, n]));
-  const totalNodes = nodes.length;
-  const baseRadius = Math.sqrt(totalNodes) * 12;
-
-  // Lay out components in a rough grid of clusters
-  const cols = Math.ceil(Math.sqrt(components.length));
-  components.forEach((comp, ci) => {
-    const col = ci % cols;
-    const row = Math.floor(ci / cols);
-    const cx  = (col - cols / 2 + 0.5) * baseRadius * 1.8;
-    const cy  = (row - Math.ceil(components.length / cols) / 2 + 0.5) * baseRadius * 1.8;
-
-    const compSize = comp.length;
-    const clusterR = Math.max(60, Math.sqrt(compSize) * 18);
-
-    // Separate meta and anime nodes in the component
-    const animeIds = comp.filter(id => nodeById.get(id)?.data?.type === 'anime');
-    const metaIds  = comp.filter(id => nodeById.get(id)?.data?.type !== 'anime');
-
-    // Anime nodes: spiral layout for variety
-    animeIds.forEach((id, i) => {
-      const n = nodeById.get(id);
-      if (!n) return;
-      const angle  = i * 2.4; // golden angle approx
-      const radius = Math.sqrt(i + 1) * (clusterR / Math.sqrt(animeIds.length + 1));
-      // Add jitter to break symmetry
-      const jx = (Math.random() - 0.5) * radius * 0.5;
-      const jy = (Math.random() - 0.5) * radius * 0.5;
-      n.x = cx + Math.cos(angle) * radius + jx;
-      n.y = cy + Math.sin(angle) * radius + jy;
-    });
-
-    // Meta nodes: push to outer ring beyond anime
-    metaIds.forEach((id, i) => {
-      const n = nodeById.get(id);
-      if (!n) return;
-      const angle  = (i / Math.max(metaIds.length, 1)) * Math.PI * 2;
-      const radius = clusterR * 1.8 + Math.random() * clusterR * 0.4;
-      n.x = cx + Math.cos(angle) * radius;
-      n.y = cy + Math.sin(angle) * radius;
-    });
-  });
-
-  // Isolated nodes (no edges): scatter in periphery
-  nodes.forEach(n => {
-    if (n.x === undefined) {
-      const angle  = Math.random() * Math.PI * 2;
-      const radius = baseRadius * 2 + Math.random() * baseRadius;
-      n.x = Math.cos(angle) * radius;
-      n.y = Math.sin(angle) * radius;
-    }
-  });
-}
-
 // ── RENDER ────────────────────────────────────────────────────────────────────
 function renderGraph({ nodes, links, filteredAnime, highlightedAnime, visibleMeta }) {
   if (!graphInstance) return;
@@ -239,9 +144,6 @@ function renderGraph({ nodes, links, filteredAnime, highlightedAnime, visibleMet
 
   clearSelection();
   clearLegendHighlight();
-
-  // Pre-position nodes to break circle formations
-  prePositionNodes(nodes, links);
 
   // Show loading overlay
   const warmupCount = nodes.length > 8000 ? 50 : nodes.length > 3000 ? 80 : nodes.length > 1000 ? 120 : 180;
