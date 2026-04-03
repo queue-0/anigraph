@@ -48,7 +48,7 @@ RELATION_LABELS = {
 
 # Tags in the offline DB that are treated as genres
 GENRE_TAGS = {
-    "action", "adventure", "comedy", "ecchi", "fantasy", "horror",
+    "action", "adventure", "comedy", "ecchi", "fantasy", "horror","drama",
     "mahou shoujo", "mecha", "music", "mystery", "psychological",
     "romance", "sci-fi", "slice of life", "sports", "supernatural", "thriller",
 }

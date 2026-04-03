@@ -15,14 +15,14 @@ const DATA_URL = './data/anime-graph.json';
 
 // ── DEFAULTS ──────────────────────────────────────────────────────────────────
 const DEFAULTS = {
-  types:          ['TV','MOVIE','OVA','ONA','SPECIAL','UNKNOWN'],
+  types:          ['TV'],                   // default: TV only
   releaseStatuses:['FINISHED','RELEASING','NOT_YET_RELEASED','CANCELLED','HIATUS','UNKNOWN'],
-  nodeTypes:      ['anime','studio','genre'],
-  yearFrom:  1917, yearTo:   2030,
-  epMin:     0,    epMax:    9999,
-  lenMin:    0,    lenMax:   999999,
-  scoreMin:  0,    scoreMax: 10,
-  colorBy:   'node_type',
+  nodeTypes:      ['anime','studio'],        // default: anime + studio only
+  yearFrom:  0,   yearTo:   2026,
+  epMin:     0,   epMax:    9999,
+  lenMin:    30,  lenMax:   999999,          // default: min 30 min total length
+  scoreMin:  0,   scoreMax: 10,
+  colorBy:   'score',                        // default: color by score
   nodeSizeBy:'default',
   search:    '',
   selTags: [], selGenres: [], selStudios: [],
@@ -78,8 +78,9 @@ async function loadDatabase() {
   await new Promise(r => setTimeout(r, 0));
   rawGraph.nodes.forEach(n => window._nodeById.set(n.node_id, n));
 
-  document.getElementById('stat-total').textContent =
-    (rawGraph.meta?.total_anime ?? rawGraph.nodes.filter(n => n.type === 'anime').length).toLocaleString();
+  // stat-total: count actual anime nodes (not meta count from rawGraph.meta which may be off-by-one)
+  const actualAnimeCount = rawGraph.nodes.filter(n => n.type === 'anime').length;
+  document.getElementById('stat-total').textContent = actualAnimeCount.toLocaleString();
 
   setProgress(75, 'Building filter lists…');
   populateFilterLists();
@@ -363,14 +364,106 @@ function showShareToast(msg) {
   clearTimeout(t._timer); t._timer = setTimeout(()=>t.classList.remove('visible'), 2200);
 }
 
-// ── CLEAR ALL FILTERS ─────────────────────────────────────────────────────────
+// ── CONFIG PANEL ──────────────────────────────────────────────────────────────
+// All color keys that the user can configure, with labels
+const CONFIG_COLOR_KEYS = [
+  { key: 'anime_node',      label: 'Anime nodes' },
+  { key: 'studio',          label: 'Studio nodes' },
+  { key: 'genre',           label: 'Genre nodes' },
+  { key: 'tag',             label: 'Tag nodes' },
+  { key: 'anime_type',      label: 'Anime Type meta' },
+  { key: 'season_node',     label: 'Season meta' },
+  { key: 'year_node',       label: 'Year Band meta' },
+  { key: 'status_node',     label: 'Air Status meta' },
+  { key: 'completion_node', label: 'List Status meta' },
+  { key: 'type_TV',         label: 'Type: TV' },
+  { key: 'type_MOVIE',      label: 'Type: Movie' },
+  { key: 'type_OVA',        label: 'Type: OVA' },
+  { key: 'type_ONA',        label: 'Type: ONA' },
+  { key: 'type_SPECIAL',    label: 'Type: Special' },
+  { key: 'type_UNKNOWN',    label: 'Type: Unknown' },
+];
+
+function openConfigPanel() {
+  const panel = document.getElementById('config-panel');
+  if (!panel) return;
+  // Populate with current colors
+  const body = document.getElementById('config-color-rows');
+  body.innerHTML = '';
+  const current = window.CONFIGURABLE_COLORS || {};
+  const defaults = window.META_NODE_DEFAULTS || {};
+  const typeDefs = window.ANIME_TYPE_COLORS  || {};
+
+  CONFIG_COLOR_KEYS.forEach(({ key, label }) => {
+    const defVal = defaults[key] || typeDefs[key.replace('type_','')] || '#888888';
+    const curVal = current[key] || defVal;
+    const row = document.createElement('div');
+    row.className = 'config-row';
+    row.innerHTML = `
+      <label class="config-label">${label}</label>
+      <div class="config-swatch-wrap">
+        <input type="color" class="config-color-input" data-key="${key}" value="${curVal}">
+        <input type="text"  class="config-hex-input"   data-key="${key}" value="${curVal}" maxlength="7" spellcheck="false">
+        <button class="config-reset-one" data-key="${key}" data-default="${defVal}" title="Reset to default">↺</button>
+      </div>`;
+    body.appendChild(row);
+
+    // Sync color↔text
+    const colorInput = row.querySelector('.config-color-input');
+    const hexInput   = row.querySelector('.config-hex-input');
+    colorInput.addEventListener('input', () => { hexInput.value = colorInput.value; });
+    hexInput.addEventListener('input', () => {
+      const v = hexInput.value.trim();
+      if (/^#[0-9a-f]{6}$/i.test(v)) colorInput.value = v;
+    });
+    row.querySelector('.config-reset-one').addEventListener('click', e => {
+      const def = e.currentTarget.dataset.default;
+      colorInput.value = def;
+      hexInput.value   = def;
+    });
+  });
+
+  panel.classList.add('open');
+}
+
+function closeConfigPanel() {
+  document.getElementById('config-panel')?.classList.remove('open');
+}
+
+function applyConfigColors() {
+  const colors = {};
+  document.querySelectorAll('.config-color-input').forEach(inp => {
+    colors[inp.dataset.key] = inp.value;
+  });
+  window.CONFIGURABLE_COLORS = colors;
+  // Save to localStorage
+  try { localStorage.setItem('anigraph_colors', JSON.stringify(colors)); } catch(_) {}
+  closeConfigPanel();
+  applyFiltersAndRender();
+}
+
+function resetConfigColors() {
+  window.CONFIGURABLE_COLORS = {};
+  try { localStorage.removeItem('anigraph_colors'); } catch(_) {}
+  closeConfigPanel();
+  applyFiltersAndRender();
+}
+
+function loadSavedColors() {
+  try {
+    const saved = localStorage.getItem('anigraph_colors');
+    if (saved) window.CONFIGURABLE_COLORS = JSON.parse(saved);
+  } catch(_) {}
+}
 function clearAllFilters() {
-  document.querySelectorAll('#type-checkboxes input').forEach(i=>i.checked=true);
-  document.querySelectorAll('#release-status-checkboxes input').forEach(i=>i.checked=true);
-  // document.querySelectorAll('#country-checkboxes input').forEach(i=>i.checked=true);  // commented out
+  // Reset type checkboxes to TV only
+  document.querySelectorAll('#type-checkboxes input').forEach(i => {
+    i.checked = DEFAULTS.types.includes(i.value);
+  });
+  document.querySelectorAll('#release-status-checkboxes input').forEach(i => i.checked = true);
 
   const defNT = new Set(DEFAULTS.nodeTypes);
-  document.querySelectorAll('#node-type-visibility input').forEach(i=>{i.checked=defNT.has(i.value);});
+  document.querySelectorAll('#node-type-visibility input').forEach(i => { i.checked = defNT.has(i.value); });
 
   document.getElementById('year-from').value  = DEFAULTS.yearFrom;
   document.getElementById('year-to').value    = DEFAULTS.yearTo;
@@ -382,21 +475,23 @@ function clearAllFilters() {
   document.getElementById('score-max').value  = DEFAULTS.scoreMax;
   document.getElementById('min-cluster-size').value = DEFAULTS.minClusterSize;
 
-  document.querySelector('input[name="colorby"][value="node_type"]').checked  = true;
+  // Default colorBy is now 'score'
+  const cbDefault = document.querySelector(`input[name="colorby"][value="${DEFAULTS.colorBy}"]`);
+  if (cbDefault) cbDefault.checked = true;
   document.querySelector('input[name="nodeSizeBy"][value="default"]').checked = true;
   document.getElementById('search-input').value = '';
 
-  ['tag-select','genre-select','studio-select'].forEach(id=>{
-    const sel=document.getElementById(id);
-    if(sel) [...sel.options].forEach(o=>o.selected=false);
+  ['tag-select','genre-select','studio-select'].forEach(id => {
+    const sel = document.getElementById(id);
+    if (sel) [...sel.options].forEach(o => o.selected = false);
   });
 
-  document.querySelectorAll('.highlight-toggle input').forEach(i=>i.checked=false);
+  document.querySelectorAll('.highlight-toggle input').forEach(i => i.checked = false);
 
-  const ms=document.getElementById('mode-select');
-  if(ms) ms.value='all';
+  const ms = document.getElementById('mode-select');
+  if (ms) ms.value = 'all';
 
-  history.replaceState(null,'',window.location.pathname+window.location.search);
+  history.replaceState(null, '', window.location.pathname + window.location.search);
   applyFiltersAndRender();
 }
 
@@ -422,11 +517,16 @@ document.addEventListener('DOMContentLoaded', () => {
     clearTimeout(window._searchTimer);
     window._searchTimer = setTimeout(applyFiltersAndRender, 400);
   });
-  document.querySelectorAll('.section-apply-btn').forEach(btn=>btn.addEventListener('click', applyFiltersAndRender));
+  document.querySelectorAll('.section-apply-btn').forEach(btn => btn.addEventListener('click', applyFiltersAndRender));
   document.getElementById('clear-all-btn')?.addEventListener('click', clearAllFilters);
   document.getElementById('share-btn')?.addEventListener('click', copyShareLink);
   document.getElementById('download-btn')?.addEventListener('click', downloadVisibleAnimeList);
-  document.getElementById('debug-anilist-btn')?.addEventListener('click', downloadAnilistDebug);
+
+  // Config panel
+  document.getElementById('config-btn')?.addEventListener('click', openConfigPanel);
+  document.getElementById('config-close-btn')?.addEventListener('click', closeConfigPanel);
+  document.getElementById('config-apply-btn')?.addEventListener('click', applyConfigColors);
+  document.getElementById('config-reset-btn')?.addEventListener('click', resetConfigColors);
 
   // Min cluster size: stat-only recalculation, NO full graph re-render
   document.getElementById('apply-cluster-size')?.addEventListener('click', () => {

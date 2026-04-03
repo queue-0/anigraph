@@ -22,17 +22,25 @@ const GENRE_TAGS = new Set([
 ]);
 
 // ── META NODE COLORS ──────────────────────────────────────────────────────────
-const META_NODE_COLORS = {
+// Defaults — overridden at runtime by window.CONFIGURABLE_COLORS
+function getMetaColor(key) {
+  return (window.CONFIGURABLE_COLORS || {})[key] || META_NODE_DEFAULTS[key] || '#808080';
+}
+const META_NODE_DEFAULTS = {
   studio:         '#5eb8ff',
-  genre:          '#ffb347',
+  genre:          '#c882ff',  // distinct violet — was orange (#ffb347)
   tag:            '#5dde9a',
-  // Color-category virtual nodes:
+  anime_node:     '#e8a030',  // base anime color
   anime_type:     '#f0a030',
   season_node:    '#88cc44',
   year_node:      '#66aaff',
   status_node:    '#dd88aa',
   completion_node:'#40c080',
 };
+// Keep META_NODE_COLORS as a proxy that reads from CONFIGURABLE_COLORS
+const META_NODE_COLORS = new Proxy(META_NODE_DEFAULTS, {
+  get(target, key) { return getMetaColor(key); }
+});
 
 // ── ANIME TYPE COLORS ─────────────────────────────────────────────────────────
 const ANIME_TYPE_COLORS = {
@@ -92,13 +100,18 @@ function yearBandLabel(year) {
   return (YEAR_BANDS.find(b => year <= b.max) || YEAR_BANDS[YEAR_BANDS.length - 1]).label;
 }
 
-// ── GRADIENT: red(low) → green(high) ─────────────────────────────────────────
+// ── GRADIENT: green(10) → yellow(~7) → red(≤5) ───────────────────────────────
+// Scores: 10=green(120°), 7=yellow(60°), 5=orange(30°), ≤0=red(0°)
+// Map score 0-10 → hue 0-120, but shift so red starts at 5, not 0
 function gradientColor(t) {
+  // t is 0–1 where 1=best
   t = Math.max(0, Math.min(1, t));
-  const hue = t * 120; // 0=red, 60=yellow, 120=green
-  return `hsl(${hue.toFixed(0)},80%,50%)`;
+  // Remap so that t=0.5 (score=5) → hue=0 (red), t=1 (score=10) → hue=120 (green)
+  // Below 5 is all red; 5–10 maps to red→green
+  const hue = Math.max(0, (t - 0.5) / 0.5) * 120;
+  return `hsl(${hue.toFixed(0)},85%,52%)`;
 }
-function scoreColor(score)      { return score  == null ? '#555' : gradientColor(score / 10); }
+function scoreColor(score)      { return score == null ? '#555' : gradientColor(score / 10); }
 function durationColor(mins)    { return (!mins || mins <= 0) ? '#555' : gradientColor(Math.min(mins, 2000) / 2000); }
 function scoreDeltaColor(delta) { return gradientColor((delta + 5) / 10); }
 
@@ -158,11 +171,13 @@ function getFilters() {
 // ── COLOR RESOLVER ────────────────────────────────────────────────────────────
 function getNodeColor(node, colorBy, nodeById) {
   if (node._virtualMeta) return node._color;
-  if (node.type !== 'anime') return META_NODE_COLORS[node.type] || '#808080';
+  if (node.type !== 'anime') return getMetaColor(node.type) || '#808080';
+
+  // Use configurable anime base color
+  const animeBase = getMetaColor('anime_node');
 
   switch (colorBy) {
-    case 'node_type':  return '#e8a030';
-    case 'type':       return ANIME_TYPE_COLORS[node.anime_type] || '#606060';
+    case 'type':       return (window.CONFIGURABLE_COLORS?.['type_'+node.anime_type]) || ANIME_TYPE_COLORS[node.anime_type] || '#606060';
     case 'year':       return yearColor(node.year);
     case 'season':     return SEASON_COLORS[node.season] || '#666666';
     case 'score':      return scoreColor(node.score);
@@ -180,7 +195,7 @@ function getNodeColor(node, colorBy, nodeById) {
       const us = getUserScoreForAnime ? getUserScoreForAnime(node.al_id) : null;
       return (us == null || node.score == null) ? '#555555' : scoreDeltaColor(us - node.score);
     }
-    default: return '#e8a030';
+    default: return animeBase;
   }
 }
 
@@ -377,13 +392,12 @@ function buildGraphData(rawGraph, filters, nodeById) {
   const visibleMeta = rawGraph.nodes.filter(n => visibleMetaIds.has(n.node_id));
 
   // ── 3. Virtual color-category meta nodes ─────────────────────────────────
-  // These are synthetic nodes (not from rawGraph) connecting anime to
-  // their type/season/year/status/completion category.
-  const showTypeNodes       = filters.visibleNodeTypes.has('anime_type')     && colorBy !== 'type';
-  const showSeasonNodes     = filters.visibleNodeTypes.has('season_node')    && colorBy !== 'season';
-  const showYearNodes       = filters.visibleNodeTypes.has('year_node')      && colorBy !== 'year';
-  const showStatusNodes     = filters.visibleNodeTypes.has('status_node')    && colorBy !== 'release_status';
-  const showCompletionNodes = filters.visibleNodeTypes.has('completion_node') && colorBy !== 'completion';
+  // These are ALWAYS shown when their checkbox is checked (no auto-hide)
+  const showTypeNodes       = filters.visibleNodeTypes.has('anime_type');
+  const showSeasonNodes     = filters.visibleNodeTypes.has('season_node');
+  const showYearNodes       = filters.visibleNodeTypes.has('year_node');
+  const showStatusNodes     = filters.visibleNodeTypes.has('status_node');
+  const showCompletionNodes = filters.visibleNodeTypes.has('completion_node');
 
   // Virtual node registry: key → syntheticId
   const virtualNodeMap = new Map();
@@ -410,7 +424,7 @@ function buildGraphData(rawGraph, filters, nodeById) {
   // Build virtual nodes + links for each anime
   for (const a of finalAllAnime) {
     if (showTypeNodes && a.anime_type) {
-      const col = ANIME_TYPE_COLORS[a.anime_type] || '#606060';
+      const col = (window.CONFIGURABLE_COLORS?.['type_'+a.anime_type]) || ANIME_TYPE_COLORS[a.anime_type] || '#606060';
       const vid = getOrCreateVirtual(`type_${a.anime_type}`, a.anime_type, col, 'anime_type');
       virtualLinks.push({ source: a.node_id, target: vid, kind: 'anime_type', relationLabel: null });
     }
@@ -420,9 +434,9 @@ function buildGraphData(rawGraph, filters, nodeById) {
       virtualLinks.push({ source: a.node_id, target: vid, kind: 'season_node', relationLabel: null });
     }
     if (showYearNodes && a.year) {
-      const band  = YEAR_BANDS.find(b => a.year <= b.max) || YEAR_BANDS[YEAR_BANDS.length - 1];
-      const col   = `hsl(${band.hue},70%,55%)`;
-      const vid   = getOrCreateVirtual(`year_${band.label}`, band.label, col, 'year_node');
+      const band = YEAR_BANDS.find(b => a.year <= b.max) || YEAR_BANDS[YEAR_BANDS.length - 1];
+      const col  = `hsl(${band.hue},70%,55%)`;
+      const vid  = getOrCreateVirtual(`year_${band.label}`, band.label, col, 'year_node');
       virtualLinks.push({ source: a.node_id, target: vid, kind: 'year_node', relationLabel: null });
     }
     if (showStatusNodes) {
@@ -701,24 +715,29 @@ function buildLegend(filteredAnime, colorBy, visibleNodeTypes, visibleMetaForLeg
     container.appendChild(div);
   }
 
-  function addGradientBar(loLabel, hiLabel) {
+  function addGradientBar(loLabel, hiLabel, c1, c2, c3) {
+    const grad = c1 ? `linear-gradient(90deg,${c1},${c2||c1},${c3||c2||c1})` :
+      'linear-gradient(90deg,hsl(0,85%,52%),hsl(30,85%,52%),hsl(120,85%,52%))';
     const div = document.createElement('div');
     div.className = 'legend-gradient';
     div.innerHTML = `
-      <div class="legend-grad-bar" style="background:linear-gradient(90deg,hsl(0,80%,50%),hsl(60,80%,50%),hsl(120,80%,50%))"></div>
+      <div class="legend-grad-bar" style="background:${grad}"></div>
       <div class="legend-grad-labels"><span>${loLabel}</span><span>${hiLabel}</span></div>`;
     container.appendChild(div);
   }
 
   const total = allAnime.length;
+  // Show anime node base color when no specific color mode
+  if (!['type','year','season','release_status','score','duration','completion','user_score','score_delta'].includes(colorBy)) {
+    addItem(getMetaColor('anime_node'), `Anime (${total.toLocaleString()})`);
+  }
 
-  if (colorBy === 'node_type') {
-    addItem('#e8a030', `Anime (${total.toLocaleString()})`, 'node_type', 'anime');
-  } else if (colorBy === 'type') {
+  if (colorBy === 'type') {
     const counts = {};
     allAnime.forEach(a => { counts[a.anime_type] = (counts[a.anime_type] || 0) + 1; });
     Object.entries(ANIME_TYPE_COLORS).forEach(([type, col]) => {
-      if (counts[type]) addItem(col, `${type} (${counts[type].toLocaleString()})`, 'anime_type', type);
+      const c = (window.CONFIGURABLE_COLORS?.['type_'+type]) || col;
+      if (counts[type]) addItem(c, `${type} (${counts[type].toLocaleString()})`, 'anime_type', type);
     });
   } else if (colorBy === 'year') {
     const bandCounts = {};
@@ -740,9 +759,9 @@ function buildLegend(filteredAnime, colorBy, visibleNodeTypes, visibleMetaForLeg
       if (counts[st]) addItem(col, `${RELEASE_STATUS_LABELS[st]||st} (${counts[st].toLocaleString()})`, 'release_status', st);
     });
   } else if (colorBy === 'score') {
-    addGradientBar('0 (low)', '10 (high)');
+    addGradientBar('≤5 (low)', '10 (high)', 'hsl(0,85%,52%)', 'hsl(60,85%,52%)', 'hsl(120,85%,52%)');
   } else if (colorBy === 'duration') {
-    addGradientBar('Short', 'Long (≥2000 min)');
+    addGradientBar('Short', 'Long (≥2000 min)', 'hsl(0,85%,52%)', 'hsl(60,85%,52%)', 'hsl(120,85%,52%)');
   } else if (colorBy === 'completion') {
     const colors = window.COMPLETION_STATUS_COLORS || {};
     const labels = window.COMPLETION_STATUS_LABELS || {};
@@ -757,9 +776,9 @@ function buildLegend(filteredAnime, colorBy, visibleNodeTypes, visibleMetaForLeg
     });
     if (notInList > 0) addItem('#555', `Not in list (${notInList.toLocaleString()})`);
   } else if (colorBy === 'user_score') {
-    addGradientBar('0 (low)', '10 (high)');
+    addGradientBar('≤5 (low)', '10 (high)', 'hsl(0,85%,52%)', 'hsl(60,85%,52%)', 'hsl(120,85%,52%)');
   } else if (colorBy === 'score_delta') {
-    addGradientBar('Much lower', 'Much higher');
+    addGradientBar('Much lower', 'Much higher', 'hsl(0,85%,52%)', 'hsl(60,85%,52%)', 'hsl(120,85%,52%)');
   }
 
   // ── Separator ─────────────────────────────────────────────────────────────
@@ -799,6 +818,8 @@ function totalMinutes(anime) {
 
 // ── EXPORTS ───────────────────────────────────────────────────────────────────
 window.META_NODE_COLORS        = META_NODE_COLORS;
+window.META_NODE_DEFAULTS      = META_NODE_DEFAULTS;
+window.getMetaColor            = getMetaColor;
 window.ANIME_TYPE_COLORS       = ANIME_TYPE_COLORS;
 window.SEASON_COLORS           = SEASON_COLORS;
 window.RELEASE_STATUS_COLORS   = RELEASE_STATUS_COLORS;
